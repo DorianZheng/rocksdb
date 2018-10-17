@@ -22,28 +22,39 @@ void TitanDBImpl::BGWorkGC(void* db) {
 }
 
 void TitanDBImpl::BackgroundCallGC() {
-  // Is this legal? call bg_cv_.SignalAll() maybe
-  MutexLock l(&mutex_);
-  assert(bg_gc_scheduled_ > 0);
-  BackgroundGC();
+  LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL, db_options_.info_log.get());
 
-  PurgeObsoleteFiles();
+  {
+    MutexLock l(&mutex_);
+    assert(bg_gc_scheduled_ > 0);
 
-  bg_gc_scheduled_--;
-  if (bg_gc_scheduled_ == 0) {
-    // signal if
-    // * bg_gc_scheduled_ == 0 -- need to wakeup ~TitanDBImpl
-    // If none of this is true, there is no need to signal since nobody is
-    // waiting for it
-    bg_cv_.SignalAll();
+    BackgroundGC(&log_buffer);
+
+    PurgeObsoleteFiles();
+
+    {
+      mutex_.Unlock();
+      log_buffer.FlushBufferToLog();
+      LogFlush(db_options_.info_log.get());
+      mutex_.Lock();
+    }
+
+    bg_gc_scheduled_--;
+    if (bg_gc_scheduled_ == 0) {
+      // signal if
+      // * bg_gc_scheduled_ == 0 -- need to wakeup ~TitanDBImpl
+      // If none of this is true, there is no need to signal since nobody is
+      // waiting for it
+      bg_cv_.SignalAll();
+    }
+    // IMPORTANT: there should be no code after calling SignalAll. This call may
+    // signal the DB destructor that it's OK to proceed with destruction. In
+    // that case, all DB variables will be dealloacated and referencing them
+    // will cause trouble.
   }
-  // IMPORTANT: there should be no code after calling SignalAll. This call may
-  // signal the DB destructor that it's OK to proceed with destruction. In
-  // that case, all DB variables will be dealloacated and referencing them
-  // will cause trouble.
 }
 
-Status TitanDBImpl::BackgroundGC() {
+Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
   mutex_.AssertHeld();
 
   std::unique_ptr<BlobGC> blob_gc;
@@ -63,10 +74,15 @@ Status TitanDBImpl::BackgroundGC() {
     cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
   }
 
-  if (blob_gc) {
-    assert(cfh);
+  // TODO(@DorianZheng) Make sure enough room for GC
+
+  if (UNLIKELY(!blob_gc)) {
+    // Nothing to do
+    ROCKS_LOG_BUFFER(log_buffer, "Titan GC nothing to do");
+  } else {
     BlobGCJob blob_gc_job(blob_gc.get(), db_, cfh.get(), &mutex_, db_options_,
-                          env_, env_options_, blob_manager_.get(), vset_.get());
+                          env_, env_options_, blob_manager_.get(), vset_.get(),
+                          log_buffer);
     s = blob_gc_job.Prepare();
 
     if (s.ok()) {
@@ -78,8 +94,13 @@ Status TitanDBImpl::BackgroundGC() {
     if (s.ok()) {
       s = blob_gc_job.Finish();
     }
+  }
+
+  if (s.ok()) {
+    // Done
   } else {
-    // Nothing to do
+    ROCKS_LOG_WARN(db_options_.info_log, "Titan GC error: %s",
+                   s.ToString().c_str());
   }
 
   return s;

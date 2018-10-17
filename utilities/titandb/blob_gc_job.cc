@@ -63,7 +63,7 @@ BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, ColumnFamilyHandle* cfh,
                      port::Mutex* mutex, const TitanDBOptions& titan_db_options,
                      Env* env, const EnvOptions& env_options,
                      BlobFileManager* blob_file_manager,
-                     VersionSet* version_set)
+                     VersionSet* version_set, LogBuffer* log_buffer)
     : blob_gc_(blob_gc),
       base_db_(db),
       base_db_impl_(reinterpret_cast<DBImpl*>(base_db_)),
@@ -73,7 +73,8 @@ BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, ColumnFamilyHandle* cfh,
       env_(env),
       env_options_(env_options),
       blob_file_manager_(blob_file_manager),
-      version_set_(version_set) {}
+      version_set_(version_set),
+      log_buffer_(log_buffer) {}
 
 BlobGCJob::~BlobGCJob() {
   if (cmp_) delete cmp_;
@@ -85,6 +86,26 @@ Status BlobGCJob::Run() {
   Status s;
 
   s = SampleCandidateFiles();
+
+  std::string tmp;
+  for (const auto& f : blob_gc_->candidate_files()) {
+    if (!tmp.empty()) {
+      tmp.append(" ");
+    }
+    tmp.append(std::to_string(f->file_number));
+  }
+
+  std::string tmp2;
+  for (const auto& f : blob_gc_->selected_files()) {
+    if (!tmp2.empty()) {
+      tmp2.append(" ");
+    }
+    tmp2.append(std::to_string(f->file_number));
+  }
+
+  ROCKS_LOG_BUFFER(log_buffer_, "[%s] Titan GC candidates[%s] selected[%s]",
+                   cfh_->GetName().c_str(), tmp.c_str(), tmp2.c_str());
+
   if (!s.ok()) return s;
 
   s = DoRunGC();
@@ -351,7 +372,8 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
   auto* db_impl = reinterpret_cast<DBImpl*>(this->base_db_);
   WriteOptions wo;
   wo.low_pri = true;
-  // TODO(@DorianZheng) more elegant solution to deal with missing column families
+  // TODO(@DorianZheng) more elegant solution to deal with missing column
+  // families
   wo.ignore_missing_column_families = true;
   for (auto& write_batch : this->rewrite_batches_) {
     s = db_impl->WriteWithCallback(wo, &write_batch.first, &write_batch.second);

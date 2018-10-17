@@ -93,7 +93,7 @@ class TitanDBImpl : public TitanDB {
 
   static void BGWorkGC(void* db);
   void BackgroundCallGC();
-  Status BackgroundGC();
+  Status BackgroundGC(LogBuffer* log_buffer);
 
   // REQUIRES: mutex_ held;
   void PurgeObsoleteFiles();

@@ -90,7 +90,7 @@ class BlobGCJobTest : public testing::Test {
 
     BlobGCJob blob_gc_job(blob_gc.get(), base_db_, cfh, mutex_,
                           tdb_->db_options_, tdb_->env_, EnvOptions(),
-                          tdb_->blob_manager_.get(), version_set_);
+                          tdb_->blob_manager_.get(), version_set_, nullptr);
 
     s = blob_gc_job.Prepare();
     ASSERT_OK(s);
@@ -134,7 +134,8 @@ class BlobGCJobTest : public testing::Test {
     auto rewrite_status = base_db_->Write(WriteOptions(), &wb);
 
     BlobGCJob blob_gc_job(nullptr, base_db_, cfh, mutex_, TitanDBOptions(),
-                          Env::Default(), EnvOptions(), nullptr, version_set_);
+                          Env::Default(), EnvOptions(), nullptr, version_set_,
+                          nullptr);
     ASSERT_FALSE(blob_gc_job.DiscardEntry(key, blob_index));
     DestoyDB();
   }
