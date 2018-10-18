@@ -3468,7 +3468,7 @@ void VerifyDBFromDB(std::string& truth_db_name) {
 
     InitializeOptionsGeneral(opts);
 
-    opts->min_blob_size = 1024;
+    opts->min_blob_size = 0;
     opts->min_gc_batch_size = 128 << 20;
     opts->blob_file_compression = FLAGS_compression_type_e;
     if (FLAGS_cache_size) {
