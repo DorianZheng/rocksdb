@@ -3446,7 +3446,7 @@ void VerifyDBFromDB(std::string& truth_db_name) {
       opts->blob_cache = cache_;
     }
     opts->max_background_gc = FLAGS_max_background_jobs;
-    opts->max_gc_batch_size = 20LLU << 30;
+    opts->max_gc_batch_size = 8LLU << 30;
 
     if (FLAGS_num_multi_db <= 1) {
       OpenDb(options, FLAGS_db, &db_);
