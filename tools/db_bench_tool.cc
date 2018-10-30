@@ -3474,6 +3474,8 @@ void VerifyDBFromDB(std::string& truth_db_name) {
     if (FLAGS_cache_size) {
       opts->blob_cache = cache_;
     }
+    opts->max_background_gc = FLAGS_max_background_compactions;
+    opts->max_gc_batch_size = 20LLU << 30;
   }
 
   void OpenDb(titandb::TitanOptions options, const std::string& db_name,
