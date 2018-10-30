@@ -175,8 +175,9 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
       env_->IncBackgroundThreadsIfNeeded(
           db_options_.max_background_gc + low_pri_threads_num,
           Env::Priority::LOW);
-      fprintf(stderr, "ORIGIN:%d MAX BACKGROUND GC:%d\n",
+      fprintf(stderr, "ORIGIN:%d MAX BACKGROUND GC:%d NEW:%d\n",
               low_pri_threads_num,
+              db_options_.max_background_gc,
               env_->GetBackgroundThreads(Env::Priority::LOW));
       assert(env_->GetBackgroundThreads(Env::Priority::LOW) >
           low_pri_threads_num);
