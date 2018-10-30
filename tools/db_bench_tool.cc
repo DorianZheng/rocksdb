@@ -3439,6 +3439,15 @@ void VerifyDBFromDB(std::string& truth_db_name) {
           FLAGS_rate_limiter_auto_tuned));
     }
 
+    opts->min_blob_size = 0;
+    opts->min_gc_batch_size = 128 << 20;
+    opts->blob_file_compression = FLAGS_compression_type_e;
+    if (FLAGS_cache_size) {
+      opts->blob_cache = cache_;
+    }
+    opts->max_background_gc = FLAGS_max_background_jobs;
+    opts->max_gc_batch_size = 20LLU << 30;
+
     if (FLAGS_num_multi_db <= 1) {
       OpenDb(options, FLAGS_db, &db_);
     } else {
@@ -3465,17 +3474,7 @@ void VerifyDBFromDB(std::string& truth_db_name) {
     if (!InitializeOptionsFromFile(opts)) {
       InitializeOptionsFromFlags(opts);
     }
-
     InitializeOptionsGeneral(opts);
-
-    opts->min_blob_size = 0;
-    opts->min_gc_batch_size = 128 << 20;
-    opts->blob_file_compression = FLAGS_compression_type_e;
-    if (FLAGS_cache_size) {
-      opts->blob_cache = cache_;
-    }
-    opts->max_background_gc = FLAGS_max_background_jobs;
-    opts->max_gc_batch_size = 20LLU << 30;
   }
 
   void OpenDb(titandb::TitanOptions options, const std::string& db_name,
