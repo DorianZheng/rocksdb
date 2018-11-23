@@ -370,6 +370,11 @@ size_t WriteThread::EnterAsBatchGroupLeader(Writer* leader,
   // (newest_writer) is inclusive. Iteration goes from old to new.
   Writer* w = leader;
   while (w != newest_writer) {
+    if (w->callback != nullptr && !w->callback->AllowWriteBatching()) {
+      // dont batch writes that don't want to be batched
+      break;
+    }
+
     w = w->link_newer;
 
     if (w->sync && !leader->sync) {
@@ -551,6 +556,11 @@ void WriteThread::ExitAsBatchGroupLeader(WriteGroup& write_group,
   Writer* last_writer = write_group.last_writer;
   assert(leader->link_older == nullptr);
 
+  if (leader->callback && !leader->callback->AllowWriteBatching() &&
+      leader != last_writer) {
+    abort();
+  }
+
   // Propagate memtable write error to the whole group.
   if (status.ok() && !write_group.status.ok()) {
     status = write_group.status;
@@ -583,6 +593,10 @@ void WriteThread::ExitAsBatchGroupLeader(WriteGroup& write_group,
       // for next leader from there.
       next_leader = FindNextLeader(expected, last_writer);
       assert(next_leader != nullptr && next_leader != last_writer);
+      if (leader->callback && !leader->callback->AllowWriteBatching() &&
+          leader->link_newer != nullptr && next_leader != leader->link_newer) {
+        abort();
+      }
     }
 
     // Link the ramaining of the group to memtable writer list.

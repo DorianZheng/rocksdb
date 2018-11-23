@@ -445,6 +445,10 @@ Status DBImpl::PipelinedWriteImpl(const WriteOptions& write_options,
       SequenceNumber next_sequence = current_sequence;
       for (auto writer : wal_write_group) {
         if (writer->CheckCallback(this)) {
+          if (w.callback && !w.callback->AllowWriteBatching() &&
+              wal_write_group.size > 1) {
+            abort();
+          }
           if (writer->ShouldWriteToMemtable()) {
             writer->sequence = next_sequence;
             size_t count = WriteBatchInternal::Count(writer->batch);
@@ -493,7 +497,8 @@ Status DBImpl::PipelinedWriteImpl(const WriteOptions& write_options,
       mutex_.Unlock();
     }
 
-    write_thread_.ExitAsBatchGroupLeader(wal_write_group, w.status);
+    write_thread_.ExitAsBatchGroupLeader(
+        wal_write_group, w.status.ok() ? w.callback_status : w.status);
   }
 
   WriteThread::WriteGroup memtable_write_group;

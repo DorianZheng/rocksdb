@@ -187,13 +187,13 @@ class DBImpl : public DB {
                               const Slice* begin, const Slice* end) override;
 
   using DB::CompactFiles;
-  virtual Status CompactFiles(const CompactionOptions& compact_options,
-                              ColumnFamilyHandle* column_family,
-                              const std::vector<std::string>& input_file_names,
-                              const int output_level,
-                              const int output_path_id = -1,
-                              std::vector<std::string>* const output_file_names
-                              = nullptr) override;
+  virtual Status CompactFiles(
+      const CompactionOptions& compact_options,
+      ColumnFamilyHandle* column_family,
+      const std::vector<std::string>& input_file_names, const int output_level,
+      const int output_path_id = -1,
+      std::vector<std::string>* const output_file_names = nullptr,
+      CompactionJobInfo* compaction_job_info = nullptr) override;
 
   virtual Status PauseBackgroundWork() override;
   virtual Status ContinueBackgroundWork() override;
@@ -954,7 +954,8 @@ class DBImpl : public DB {
                           const std::vector<std::string>& input_file_names,
                           std::vector<std::string>* const output_file_names,
                           const int output_level, int output_path_id,
-                          JobContext* job_context, LogBuffer* log_buffer);
+                          JobContext* job_context, LogBuffer* log_buffer,
+                          CompactionJobInfo* compaction_job_info = nullptr);
 
   // Wait for current IngestExternalFile() calls to finish.
   // REQUIRES: mutex_ held

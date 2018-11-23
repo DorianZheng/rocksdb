@@ -72,8 +72,8 @@ class TitanDB : public StackableDB {
     return DropColumnFamilies({handle});
   }
 
-  virtual Status DropColumnFamilies(
-      const std::vector<ColumnFamilyHandle*>& handles) = 0;
+  //  virtual Status DropColumnFamilies(
+  //      const std::vector<ColumnFamilyHandle*>& handles) = 0;
 
   using StackableDB::Merge;
   Status Merge(const WriteOptions&, ColumnFamilyHandle*, const Slice& /*key*/,
@@ -87,6 +87,15 @@ class TitanDB : public StackableDB {
                               const Slice& /*key*/) override {
     return Status::NotSupported("Not supported operation in titan db.");
   }
+
+  using rocksdb::StackableDB::CompactFiles;
+  virtual Status CompactFiles(
+      const CompactionOptions& compact_options,
+      ColumnFamilyHandle* column_family,
+      const std::vector<std::string>& input_file_names, const int output_level,
+      const int output_path_id = -1,
+      std::vector<std::string>* const output_file_names = nullptr,
+      CompactionJobInfo* compaction_job_info = nullptr) = 0;
 };
 
 }  // namespace titandb

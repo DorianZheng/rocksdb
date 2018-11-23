@@ -245,9 +245,9 @@ void ExternalSstFileIngestionJob::UpdateStats() {
     }
     ROCKS_LOG_INFO(
         db_options_.info_log,
-        "[AddFile] External SST file %s was ingested in L%d with path %s "
+        "[%s] [AddFile] External SST file %s was ingested in L%d with path %s "
         "(global_seqno=%" PRIu64 ")\n",
-        f.external_file_path.c_str(), f.picked_level,
+        cfd_->GetName().c_str(), f.external_file_path.c_str(), f.picked_level,
         f.internal_file_path.c_str(), f.assigned_seqno);
   }
   cfd_->internal_stats()->AddCFStats(InternalStats::INGESTED_NUM_KEYS_TOTAL,

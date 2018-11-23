@@ -18,8 +18,7 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
     auto blob_file = blob_storage->FindFile(gc_score.file_number).lock();
     assert(blob_file);
 
-    if (!CheckForPick(blob_file.get(), gc_score)) continue;
-    MarkedForPick(blob_file.get());
+    if (!CheckBlobFile(blob_file.get(), gc_score)) continue;
     blob_files.push_back(blob_file.get());
 
     batch_size += blob_file->file_size;
@@ -33,18 +32,14 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
       new BlobGC(std::move(blob_files), std::move(titan_cf_options_)));
 }
 
-bool BasicBlobGCPicker::CheckForPick(BlobFileMeta* blob_file,
-                                     const GCScore& gc_score) const {
-  if (blob_file->being_gc.load(std::memory_order_acquire)) return false;
+bool BasicBlobGCPicker::CheckBlobFile(BlobFileMeta* blob_file,
+                                      const GCScore& gc_score) const {
+  if (blob_file->being_gc.load(std::memory_order_relaxed)) return false;
 
   if (gc_score.score >= titan_cf_options_.blob_file_discardable_ratio)
     blob_file->marked_for_sample = false;
 
   return true;
-}
-
-void BasicBlobGCPicker::MarkedForPick(BlobFileMeta* blob_file) {
-  blob_file->being_gc.store(true, std::memory_order_release);
 }
 
 }  // namespace titandb

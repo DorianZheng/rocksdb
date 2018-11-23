@@ -121,7 +121,7 @@ struct BlobFileMeta {
   bool marked_for_sample = true;
 
   // This field can be modified concurrently
-  std::atomic_bool being_gc{false};
+  std::atomic_bool being_gc{true};
 
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
