@@ -445,6 +445,7 @@ Status DBImpl::CompactFiles(const CompactionOptions& compact_options,
   (void)output_level;
   (void)output_path_id;
   (void)output_file_names;
+  (void)compaction_job_info
   // not supported in lite version
   return Status::NotSupported("Not supported in ROCKSDB LITE");
 #else
@@ -477,7 +478,7 @@ Status DBImpl::CompactFiles(const CompactionOptions& compact_options,
 
     s = CompactFilesImpl(compact_options, cfd, current, input_file_names,
                          output_file_names, output_level, output_path_id,
-                         &job_context, &log_buffer);
+                         &job_context, &log_buffer, compaction_job_info);
 
     current->Unref();
   }
