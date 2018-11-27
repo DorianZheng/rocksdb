@@ -67,6 +67,10 @@ Status BlobFileSizeCollector::AddUserKey(const Slice& /* key */,
 }
 
 Status BlobFileSizeCollector::Finish(UserCollectedProperties* properties) {
+  if (blob_files_size_.empty()) {
+    return Status::OK();
+  }
+
   std::string res;
   Encode(blob_files_size_, &res);
   *properties = UserCollectedProperties{{kPropertiesName, res}};

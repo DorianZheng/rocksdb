@@ -15,8 +15,46 @@ BlobFileChangeListener::~BlobFileChangeListener() {}
 
 void BlobFileChangeListener::OnFlushCompleted(
     DB* db, const FlushJobInfo& flush_job_info) {
-  (void)db;
-  (void)flush_job_info;
+  std::set<uint64_t> outputs;
+
+  MutexLock l(db_mutex_);
+
+  const auto& tp = flush_job_info.table_properties;
+  auto ucp_iter = tp.user_collected_properties.find(
+      BlobFileSizeCollector::kPropertiesName);
+  // this sst file doesn't contain any blob index
+  if (ucp_iter == tp.user_collected_properties.end()) {
+    return;
+  }
+  std::map<uint64_t, uint64_t> input_blob_files_size;
+  std::string s = ucp_iter->second;
+  Slice slice{s};
+  if (!BlobFileSizeCollector::Decode(&slice, &input_blob_files_size)) {
+    fprintf(stderr, "BlobFileSizeCollector::Decode failed\n");
+    abort();
+  }
+  for (const auto& input_bfs : input_blob_files_size) {
+    outputs.insert(input_bfs.first);
+  }
+
+  Version* current = versions_->current();
+  current->Ref();
+  auto bs = current->GetBlobStorage(flush_job_info.cf_id).lock();
+  if (!bs) {
+    fprintf(stderr, "Column family id:%u Not Found\n", flush_job_info.cf_id);
+    current->Unref();
+    return;
+  }
+  for (const auto& o : outputs) {
+    auto file = bs->FindFile(o).lock();
+    if (!file) {
+      fprintf(stderr, "Something must be wrong\n");
+      abort();
+    }
+    assert(file->being_gc.load(std::memory_order_relaxed));
+    file->being_gc.store(false, std::memory_order_relaxed);
+  }
+  current->Unref();
 }
 
 void BlobFileChangeListener::OnCompactionCompleted(
@@ -30,17 +68,25 @@ void BlobFileChangeListener::OnCompactionCompleted(
     for (const auto& file : files) {
       auto tp_iter = ci.table_properties.find(file);
       if (tp_iter == ci.table_properties.end()) {
+        if (output) {
+          fprintf(stderr, "can't find property for output\n");
+          abort();
+        }
         continue;
       }
       auto ucp_iter = tp_iter->second->user_collected_properties.find(
           BlobFileSizeCollector::kPropertiesName);
+      // this sst file doesn't contain any blob index
       if (ucp_iter == tp_iter->second->user_collected_properties.end()) {
         continue;
       }
       std::map<uint64_t, uint64_t> input_blob_files_size;
       std::string s = ucp_iter->second;
       Slice slice{s};
-      BlobFileSizeCollector::Decode(&slice, &input_blob_files_size);
+      if (!BlobFileSizeCollector::Decode(&slice, &input_blob_files_size)) {
+        fprintf(stderr, "BlobFileSizeCollector::Decode failed\n");
+        abort();
+      }
       for (const auto& input_bfs : input_blob_files_size) {
         if (output) {
           if (inputs.find(input_bfs.first) == inputs.end()) {
@@ -84,7 +130,7 @@ void BlobFileChangeListener::OnCompactionCompleted(
 
     for (const auto& bfs : blob_files_size) {
       // blob file size < 0 means discardable size > 0
-      if (bfs.second > 0) {
+      if (bfs.second >= 0) {
         continue;
       }
       auto file = bs->FindFile(bfs.first).lock();
