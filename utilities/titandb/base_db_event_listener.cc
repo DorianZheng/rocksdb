@@ -14,7 +14,7 @@ BlobFileChangeListener::BlobFileChangeListener(TitanDBImpl* db,
 BlobFileChangeListener::~BlobFileChangeListener() {}
 
 void BlobFileChangeListener::OnFlushCompleted(
-    DB* db, const FlushJobInfo& flush_job_info) {
+    DB* /*db*/, const FlushJobInfo& flush_job_info) {
   std::set<uint64_t> outputs;
 
   MutexLock l(db_mutex_);
