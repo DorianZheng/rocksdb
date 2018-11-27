@@ -446,8 +446,8 @@ Status DBImpl::CompactFiles(const CompactionOptions& compact_options,
   (void)output_path_id;
   (void)output_file_names;
   (void)compaction_job_info
-  // not supported in lite version
-  return Status::NotSupported("Not supported in ROCKSDB LITE");
+      // not supported in lite version
+      return Status::NotSupported("Not supported in ROCKSDB LITE");
 #else
   if (column_family == nullptr) {
     return Status::InvalidArgument("ColumnFamilyHandle must be non-null.");

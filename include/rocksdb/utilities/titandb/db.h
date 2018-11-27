@@ -95,7 +95,7 @@ class TitanDB : public StackableDB {
       const std::vector<std::string>& input_file_names, const int output_level,
       const int output_path_id = -1,
       std::vector<std::string>* const output_file_names = nullptr,
-      CompactionJobInfo* compaction_job_info = nullptr) = 0;
+      CompactionJobInfo* compaction_job_info = nullptr) override = 0;
 };
 
 }  // namespace titandb

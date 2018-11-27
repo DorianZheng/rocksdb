@@ -74,7 +74,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
     auto bs = current->GetBlobStorage(column_family_id).lock().get();
     const auto& titan_cf_options = bs->titan_cf_options();
     std::shared_ptr<BlobGCPicker> blob_gc_picker =
-        std::make_shared<BasicBlobGCPicker>(titan_cf_options);
+        std::make_shared<BasicBlobGCPicker>(db_options_, titan_cf_options);
     blob_gc = blob_gc_picker->PickBlobGC(bs);
 
     if (blob_gc) {
