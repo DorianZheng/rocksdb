@@ -46,7 +46,7 @@ void BlobStorage::ComputeGCScore() {
                titan_cf_options_.merge_small_file_threshold) {
       gcs.score = 1;
     } else {
-      gcs.score = file.second->discardable_size / file.second->file_size;
+      gcs.score = (double) file.second->discardable_size / (double) file.second->file_size;
     }
   }
 

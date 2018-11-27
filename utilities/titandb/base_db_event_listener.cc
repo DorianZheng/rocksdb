@@ -141,6 +141,7 @@ void BlobFileChangeListener::OnCompactionCompleted(
         continue;
       }
       file->discardable_size += static_cast<uint64_t>(-bfs.second);
+      assert(file->discardable_size > 0);
     }
     bs->ComputeGCScore();
     current->Unref();
