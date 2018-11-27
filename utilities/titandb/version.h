@@ -43,7 +43,7 @@ class BlobStorage {
 
   void MarkAllFilesForGC() {
     for (auto& file : files_) {
-      file.second->being_gc.store(false, std::memory_order_relaxed);
+      file.second->pending = false;
       file.second->marked_for_gc = true;
     }
   }

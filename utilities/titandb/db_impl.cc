@@ -472,8 +472,8 @@ Status TitanDBImpl::CompactFiles(
           fprintf(stderr, "Something must be wrong\n");
           abort();
         }
-        assert(file->being_gc.load(std::memory_order_relaxed));
-        file->being_gc.store(false, std::memory_order_relaxed);
+        assert(file->pending);
+        file->pending = false;
       }
 
       for (const auto& bfs : blob_files_size) {

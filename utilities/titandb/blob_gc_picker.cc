@@ -22,10 +22,10 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
     assert(blob_file);
 
     ROCKS_LOG_INFO(db_options_.info_log,
-                   "file number:%lu score:%f being_gc:%d size:%lu discard:%lu "
-                   "mark_for_gc:%d mark_for_sample:%d",
+                   "file number:%lu score:%f being_gc:%d pending:%d, "
+                   "size:%lu discard:%lu mark_for_gc:%d mark_for_sample:%d",
                    blob_file->file_number, gc_score.score,
-                   blob_file->being_gc.load(std::memory_order_relaxed),
+                   blob_file->being_gc, blob_file->pending,
                    blob_file->file_size, blob_file->discardable_size,
                    blob_file->marked_for_gc, blob_file->marked_for_sample);
 
@@ -48,7 +48,8 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
 
 bool BasicBlobGCPicker::CheckBlobFile(BlobFileMeta* blob_file,
                                       const GCScore& gc_score) const {
-  if (blob_file->being_gc.load(std::memory_order_relaxed)) return false;
+  if (blob_file->pending) return false;
+  if (blob_file->being_gc) return false;
 
   if (gc_score.score >= cf_options_.blob_file_discardable_ratio)
     blob_file->marked_for_sample = false;

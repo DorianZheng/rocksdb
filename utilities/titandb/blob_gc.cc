@@ -32,23 +32,23 @@ ColumnFamilyData* BlobGC::GetColumnFamilyData() {
 
 void BlobGC::MarkFilesBeingGC(bool flag) {
   for (auto& f : inputs_) {
-    assert(flag == !f->being_gc.load(std::memory_order_relaxed));
-    f->being_gc.store(flag, std::memory_order_relaxed);
-  }
-
-  for (auto& f : outputs_) {
-    assert(flag == !f->being_gc.load(std::memory_order_relaxed));
-    f->being_gc.store(flag, std::memory_order_relaxed);
+    assert(flag == !f->being_gc);
+    f->being_gc = flag;
   }
 }
 
 void BlobGC::AddOutputFile(BlobFileMeta* blob_file) {
-  assert(blob_file->being_gc.load(std::memory_order_relaxed));
+  assert(blob_file->pending);
   outputs_.push_back(blob_file);
 }
 
 void BlobGC::ReleaseGcFiles() {
   MarkFilesBeingGC(false);
+
+  for (auto& f : outputs_) {
+    assert(f->pending);
+    f->pending = false;
+  }
 }
 
 }  // namespace titandb
