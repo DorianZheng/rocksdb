@@ -72,8 +72,11 @@ Status BlobFileSizeCollector::Finish(UserCollectedProperties* properties) {
   }
 
   std::string res;
-  Encode(blob_files_size_, &res);
-  *properties = UserCollectedProperties{{kPropertiesName, res}};
+  if (!Encode(blob_files_size_, &res) || res.empty()) {
+    fprintf(stderr, "blob file size collector encode failed\n");
+    abort();
+  }
+  properties->emplace(std::make_pair(kPropertiesName, res));
   return Status::OK();
 }
 

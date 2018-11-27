@@ -50,6 +50,7 @@ bool BasicBlobGCPicker::CheckBlobFile(BlobFileMeta* blob_file,
                                       const GCScore& gc_score) const {
   if (blob_file->pending) return false;
   if (blob_file->being_gc) return false;
+  if (blob_file->pending_gc) return false;
 
   if (gc_score.score >= cf_options_.blob_file_discardable_ratio)
     blob_file->marked_for_sample = false;

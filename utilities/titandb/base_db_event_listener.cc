@@ -17,8 +17,6 @@ void BlobFileChangeListener::OnFlushCompleted(
     DB* /*db*/, const FlushJobInfo& flush_job_info) {
   std::set<uint64_t> outputs;
 
-  MutexLock l(db_mutex_);
-
   const auto& tp = flush_job_info.table_properties;
   auto ucp_iter = tp.user_collected_properties.find(
       BlobFileSizeCollector::kPropertiesName);
@@ -27,34 +25,38 @@ void BlobFileChangeListener::OnFlushCompleted(
     return;
   }
   std::map<uint64_t, uint64_t> input_blob_files_size;
-  std::string s = ucp_iter->second;
-  Slice slice{s};
+  Slice slice{ucp_iter->second};
   if (!BlobFileSizeCollector::Decode(&slice, &input_blob_files_size)) {
-    fprintf(stderr, "BlobFileSizeCollector::Decode failed\n");
+    fprintf(stderr, "BlobFileSizeCollector::Decode failed size:%lu\n", ucp_iter->second.size());
     abort();
   }
   for (const auto& input_bfs : input_blob_files_size) {
     outputs.insert(input_bfs.first);
   }
 
-  Version* current = versions_->current();
-  current->Ref();
-  auto bs = current->GetBlobStorage(flush_job_info.cf_id).lock();
-  if (!bs) {
-    fprintf(stderr, "Column family id:%u Not Found\n", flush_job_info.cf_id);
-    current->Unref();
-    return;
-  }
-  for (const auto& o : outputs) {
-    auto file = bs->FindFile(o).lock();
-    if (!file) {
-      fprintf(stderr, "Something must be wrong\n");
-      abort();
+  {
+    MutexLock l(db_mutex_);
+
+    Version* current = versions_->current();
+    current->Ref();
+    auto bs = current->GetBlobStorage(flush_job_info.cf_id).lock();
+    if (!bs) {
+      fprintf(stderr, "Column family id:%u Not Found\n", flush_job_info.cf_id);
+      current->Unref();
+      return;
     }
-    assert(file->pending);
-    file->pending = false;
+    for (const auto& o : outputs) {
+      auto file = bs->FindFile(o).lock();
+      // maybe gced from last OnFlushCompleted
+      if (!file) {
+        continue;
+      }
+      // one blob file may contain value of multiple sst file
+//    assert(file->pending);
+      file->pending = false;
+    }
+    current->Unref();
   }
-  current->Unref();
 }
 
 void BlobFileChangeListener::OnCompactionCompleted(
@@ -121,7 +123,7 @@ void BlobFileChangeListener::OnCompactionCompleted(
     for (const auto& o : outputs) {
       auto file = bs->FindFile(o).lock();
       if (!file) {
-        fprintf(stderr, "Something must be wrong\n");
+        fprintf(stderr, "OnCompactionCompleted get file failed\n");
         abort();
       }
       assert(file->pending);

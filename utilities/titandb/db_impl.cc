@@ -469,7 +469,7 @@ Status TitanDBImpl::CompactFiles(
       for (const auto& o : outputs) {
         auto file = bs->FindFile(o).lock();
         if (!file) {
-          fprintf(stderr, "Something must be wrong\n");
+          fprintf(stderr, "CompactFiles get file failed\n");
           abort();
         }
         assert(file->pending);

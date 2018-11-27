@@ -39,6 +39,7 @@ void BlobGC::MarkFilesBeingGC(bool flag) {
 
 void BlobGC::AddOutputFile(BlobFileMeta* blob_file) {
   assert(blob_file->pending);
+  blob_file->pending_gc = true;
   outputs_.push_back(blob_file);
 }
 
@@ -46,8 +47,8 @@ void BlobGC::ReleaseGcFiles() {
   MarkFilesBeingGC(false);
 
   for (auto& f : outputs_) {
-    assert(f->pending);
     f->pending = false;
+    f->pending_gc = false;
   }
 }
 
