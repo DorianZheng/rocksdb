@@ -2338,6 +2338,7 @@ class StressTest {
           new DbStressListener(FLAGS_db, options_.db_paths, cf_descriptors));
       options_.create_missing_column_families = true;
       if (FLAGS_use_titandb) {
+        options_.blob_file_target_size = 128 << 20;
         options_.disable_background_gc = FLAGS_disable_background_gc;
         options_.min_blob_size = 0;
         options_.min_gc_batch_size = 0;

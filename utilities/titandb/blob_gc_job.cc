@@ -196,6 +196,13 @@ Status BlobGCJob::DoRunGC() {
 
   auto* cfh = blob_gc_->column_family_handle();
 
+//  uint64_t drop_entry_num = 0;
+//  uint64_t drop_entry_size = 0;
+//  uint64_t total_entry_num = 0;
+//  uint64_t total_entry_size = 0;
+
+  uint64_t file_size = 0;
+
   std::string last_key;
   bool last_key_valid = false;
   gc_iter->SeekToFirst();
@@ -222,13 +229,22 @@ Status BlobGCJob::DoRunGC() {
     last_key_valid = true;
 
     // Rewrite entry to new blob file
-    if (!blob_file_handle && !blob_file_builder) {
+    if ((!blob_file_handle && !blob_file_builder) ||
+        file_size >= blob_gc_->titan_cf_options().blob_file_target_size) {
+      if (file_size >= blob_gc_->titan_cf_options().blob_file_target_size) {
+        assert(blob_file_builder);
+        assert(blob_file_handle);
+        assert(blob_file_builder->status().ok());
+        blob_file_builders_.emplace_back(std::make_pair(
+            std::move(blob_file_handle), std::move(blob_file_builder)));
+      }
       s = blob_file_manager_->NewFile(&blob_file_handle);
       if (!s.ok()) {
         break;
       }
       blob_file_builder = unique_ptr<BlobFileBuilder>(new BlobFileBuilder(
           blob_gc_->titan_cf_options(), blob_file_handle->GetFile()));
+      file_size = 0;
     }
     assert(blob_file_handle);
     assert(blob_file_builder);
@@ -236,6 +252,8 @@ Status BlobGCJob::DoRunGC() {
     BlobRecord blob_record;
     blob_record.key = gc_iter->key();
     blob_record.value = gc_iter->value();
+
+    file_size += blob_record.key.size() + blob_record.value.size();
 
     BlobIndex new_blob_index;
     new_blob_index.file_number = blob_file_handle->GetNumber();
