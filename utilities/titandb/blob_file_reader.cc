@@ -110,6 +110,11 @@ Status BlobFileReader::ReadRecord(const BlobHandle& handle, BlobRecord* record,
   Slice blob;
   std::unique_ptr<char[]> ubuf(new char[handle.size]);
   TRY(file_->Read(handle.offset, handle.size, &blob, ubuf.get()));
+  // something must be wrong
+  if (handle.size != blob.size()) {
+    fprintf(stderr, "ReadRecord actual size:%lu != blob size:%lu\n", blob.size(), handle.size);
+    abort();
+  }
 
   BlobDecoder decoder;
   TRY(decoder.DecodeHeader(&blob));
