@@ -93,12 +93,20 @@ class TitanDBIterator : public Iterator {
 
     BlobIndex index;
     status_ = DecodeInto(iter_->value(), &index);
-    if (!status_.ok()) return;
+    if (!status_.ok()) {
+      fprintf(stderr, "GetBlobValue decode blob index err:%s\n",
+              status_.ToString().c_str());
+      abort();
+    }
 
     auto it = files_.find(index.file_number);
     if (it == files_.end()) {
       std::unique_ptr<BlobFilePrefetcher> prefetcher;
       status_ = storage_->NewPrefetcher(index.file_number, &prefetcher);
+      if (status_.IsCorruption()) {
+        fprintf(stderr, "GetBlobValue err:%s\n", status_.ToString().c_str());
+        abort();
+      }
       if (!status_.ok()) return;
       it = files_.emplace(index.file_number, std::move(prefetcher)).first;
     }
