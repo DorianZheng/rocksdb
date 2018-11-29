@@ -244,8 +244,8 @@ Status SstFileWriter::Open(const std::string& file_path) {
   // be adding the external sst file blocks into it, which is wasteful.
 //  r->builder.reset(r->ioptions.table_factory->NewTableBuilder(
 //      table_builder_options, cf_id, r->file_writer.get()));
-  r->builder.reset(NewBlockBasedTableFactory(BlockBasedTableOptions())
-      ->NewTableBuilder(table_builder_options, cf_id, r->file_writer.get()));
+  static const std::unique_ptr<TableFactory> kTableBuilerFactory{NewBlockBasedTableFactory(BlockBasedTableOptions())};
+  r->builder.reset(kTableBuilerFactory->NewTableBuilder(table_builder_options, cf_id, r->file_writer.get()));
 
   r->file_info = ExternalSstFileInfo();
   r->file_info.file_path = file_path;
