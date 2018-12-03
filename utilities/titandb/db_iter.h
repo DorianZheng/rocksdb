@@ -104,7 +104,7 @@ class TitanDBIterator : public Iterator {
       std::unique_ptr<BlobFilePrefetcher> prefetcher;
       status_ = storage_->NewPrefetcher(index.file_number, &prefetcher);
       if (status_.IsCorruption()) {
-        fprintf(stderr, "GetBlobValue err:%s\n", status_.ToString().c_str());
+        fprintf(stderr, "key:%s GetBlobValue err:%s\n", iter_->key().ToString(true).c_str(), status_.ToString().c_str());
         abort();
       }
       if (!status_.ok()) return;
