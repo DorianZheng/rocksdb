@@ -184,6 +184,10 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   s = DB::Open(db_options_, dbname_, base_descs, handles, &db_);
   if (s.ok()) {
     db_impl_ = reinterpret_cast<DBImpl*>(db_->GetRootDB());
+    for (auto handle : *handles) {
+      auto* cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(handle)->cfd();
+      cfds_.insert(cfd);
+    }
   }
   return s;
 }
@@ -249,6 +253,8 @@ Status TitanDBImpl::CreateColumnFamilies(
     std::map<uint32_t, TitanCFOptions> column_families;
     for (size_t i = 0; i < descs.size(); i++) {
       column_families.emplace((*handles)[i]->GetID(), descs[i].options);
+      auto* cfd = reinterpret_cast<ColumnFamilyHandleImpl*>((*handles)[i])->cfd();
+      cfds_.insert(cfd);
     }
     vset_->AddColumnFamilies(column_families);
   }
@@ -258,8 +264,11 @@ Status TitanDBImpl::CreateColumnFamilies(
 Status TitanDBImpl::DropColumnFamilies(
     const std::vector<ColumnFamilyHandle*>& handles) {
   std::vector<uint32_t> column_families;
+  std::vector<ColumnFamilyData*> cfds;
   for (auto& handle : handles) {
     column_families.push_back(handle->GetID());
+    auto* cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(handle)->cfd();
+    cfds.push_back(cfd);
   }
 
   MutexLock l(&mutex_);
@@ -267,6 +276,9 @@ Status TitanDBImpl::DropColumnFamilies(
   Status s = db_impl_->DropColumnFamilies(handles);
   if (s.ok()) {
     vset_->DropColumnFamilies(column_families);
+    for (auto cfd : cfds) {
+      cfds_.erase(cfd);
+    }
   }
   return s;
 }
@@ -285,13 +297,22 @@ Status TitanDBImpl::Get(const ReadOptions& options, ColumnFamilyHandle* handle,
 Status TitanDBImpl::GetImpl(const ReadOptions& options,
                             ColumnFamilyHandle* handle, const Slice& key,
                             PinnableSlice* value) {
-  auto snap = reinterpret_cast<const TitanSnapshot*>(options.snapshot);
+  auto options_copy = options;
+  options_copy.total_order_seek = true;
+  auto snap = reinterpret_cast<const TitanSnapshot*>(options_copy.snapshot);
   auto storage = snap->current()->GetBlobStorage(handle->GetID()).lock();
+
+  auto* cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(handle)->cfd();
+  auto* sv = snap->GetSuperVersion(cfd);
+  if (sv == nullptr) {
+    fprintf(stderr, "GetSuperVersion failed\n");
+    abort();
+  }
 
   Status s;
   bool is_blob_index = false;
-  s = db_impl_->GetImpl(options, handle, key, value, nullptr /*value_found*/,
-                        nullptr /*read_callback*/, &is_blob_index);
+  s = db_impl_->GetImpl(options_copy, handle, key, value, nullptr /*value_found*/,
+                        nullptr /*read_callback*/, &is_blob_index, sv);
   if (!s.ok() || !is_blob_index) return s;
 
   BlobIndex index;
@@ -301,7 +322,11 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
 
   BlobRecord record;
   PinnableSlice buffer;
-  s = storage->Get(options, index, &record, &buffer);
+  s = storage->Get(options_copy, index, &record, &buffer);
+  if (s.IsCorruption()) {
+    fprintf(stderr, "Key:%s Snapshot:%lu GetBlobFile err:%s\n", key.ToString(true).c_str(), options_copy.snapshot->GetSequenceNumber(), s.ToString().c_str());
+    abort();
+  }
   if (s.ok()) {
     value->Reset();
     value->PinSelf(record.value);
@@ -312,10 +337,12 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
 std::vector<Status> TitanDBImpl::MultiGet(
     const ReadOptions& options, const std::vector<ColumnFamilyHandle*>& handles,
     const std::vector<Slice>& keys, std::vector<std::string>* values) {
-  if (options.snapshot) {
-    return MultiGetImpl(options, handles, keys, values);
+  auto options_copy = options;
+  options_copy.total_order_seek = true;
+  if (options_copy.snapshot) {
+    return MultiGetImpl(options_copy, handles, keys, values);
   }
-  ReadOptions ro(options);
+  ReadOptions ro(options_copy);
   ManagedSnapshot snapshot(this);
   ro.snapshot = snapshot.snapshot();
   return MultiGetImpl(ro, handles, keys, values);
@@ -358,9 +385,13 @@ Iterator* TitanDBImpl::NewIteratorImpl(
   auto cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(handle)->cfd();
   auto snap = reinterpret_cast<const TitanSnapshot*>(options.snapshot);
   auto storage = snap->current()->GetBlobStorage(handle->GetID());
+  auto* sv = snap->GetSuperVersion(cfd);
+  if (sv == nullptr) {
+    return nullptr;
+  }
   std::unique_ptr<ArenaWrappedDBIter> iter(db_impl_->NewIteratorImpl(
       options, cfd, snap->GetSequenceNumber(), nullptr /*read_callback*/,
-      true /*allow_blob*/));
+      true /*allow_blob*/, sv));
   return new TitanDBIterator(options, storage.lock().get(), snapshot,
                              std::move(iter));
 }
@@ -385,18 +416,26 @@ Status TitanDBImpl::NewIterators(
 const Snapshot* TitanDBImpl::GetSnapshot() {
   Version* current;
   const Snapshot* snapshot;
+  std::map<ColumnFamilyData*, SuperVersion*> svs;
   {
     MutexLock l(&mutex_);
     current = vset_->current();
     current->Ref();
     snapshot = db_->GetSnapshot();
+    for (auto cfd : cfds_) {
+      svs.emplace(cfd, db_impl_->GetReferencedSuperVersion(cfd));
+    }
   }
-  return new TitanSnapshot(current, snapshot);
+  return new TitanSnapshot(current, snapshot, &svs);
 }
 
 void TitanDBImpl::ReleaseSnapshot(const Snapshot* snapshot) {
   auto s = reinterpret_cast<const TitanSnapshot*>(snapshot);
   db_->ReleaseSnapshot(s->snapshot());
+  for (auto sv : s->svs()) {
+    db_impl_->CleanupSuperVersion(sv.second);
+  }
+
   {
     MutexLock l(&mutex_);
     s->current()->Unref();

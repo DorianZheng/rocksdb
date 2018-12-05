@@ -1063,7 +1063,7 @@ Status DBImpl::Get(const ReadOptions& read_options,
 Status DBImpl::GetImpl(const ReadOptions& read_options,
                        ColumnFamilyHandle* column_family, const Slice& key,
                        PinnableSlice* pinnable_val, bool* value_found,
-                       ReadCallback* callback, bool* is_blob_index) {
+                       ReadCallback* callback, bool* is_blob_index, SuperVersion* sv) {
   assert(pinnable_val != nullptr);
   StopWatch sw(env_, stats_, DB_GET);
   PERF_TIMER_GUARD(get_snapshot_time);
@@ -1072,7 +1072,10 @@ Status DBImpl::GetImpl(const ReadOptions& read_options,
   auto cfd = cfh->cfd();
 
   // Acquire SuperVersion
-  SuperVersion* sv = GetAndRefSuperVersion(cfd);
+  bool is_user_sv = sv == nullptr ? false : true;
+  if (!is_user_sv) {
+    sv = GetAndRefSuperVersion(cfd);
+  }
 
   TEST_SYNC_POINT("DBImpl::GetImpl:1");
   TEST_SYNC_POINT("DBImpl::GetImpl:2");
@@ -1087,8 +1090,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options,
     // In WriteUnprepared, we cannot set snapshot in the lookup key because we
     // may skip uncommitted data that should be visible to the transaction for
     // reading own writes.
-    snapshot =
-        reinterpret_cast<const SnapshotImpl*>(read_options.snapshot)->number_;
+    snapshot = read_options.snapshot->GetSequenceNumber();
     if (callback) {
       snapshot = std::max(snapshot, callback->MaxUnpreparedSequenceNumber());
     }
@@ -1124,37 +1126,54 @@ Status DBImpl::GetImpl(const ReadOptions& read_options,
   bool skip_memtable = (read_options.read_tier == kPersistedTier &&
                         has_unpersisted_data_.load(std::memory_order_relaxed));
   bool done = false;
+  SequenceNumber seq;
   if (!skip_memtable) {
     if (sv->mem->Get(lkey, pinnable_val->GetSelf(), &s, &merge_context,
-                     &range_del_agg, read_options, callback, is_blob_index)) {
+                     &range_del_agg, &seq, read_options, callback, is_blob_index)) {
+      if (s.ok() && is_blob_index != nullptr && *is_blob_index && seq > snapshot) {
+        fprintf(stderr, "snapshot:%lu seq:%lu\n", snapshot, seq);
+        abort();
+      }
       done = true;
       pinnable_val->PinSelf();
       RecordTick(stats_, MEMTABLE_HIT);
     } else if ((s.ok() || s.IsMergeInProgress()) &&
                sv->imm->Get(lkey, pinnable_val->GetSelf(), &s, &merge_context,
-                            &range_del_agg, read_options, callback,
+                            &range_del_agg, &seq, read_options, callback,
                             is_blob_index)) {
+      if (s.ok() && is_blob_index != nullptr && *is_blob_index && seq > snapshot) {
+        fprintf(stderr, "snapshot:%lu seq:%lu\n", snapshot, seq);
+        abort();
+      }
       done = true;
       pinnable_val->PinSelf();
       RecordTick(stats_, MEMTABLE_HIT);
     }
     if (!done && !s.ok() && !s.IsMergeInProgress()) {
-      ReturnAndCleanupSuperVersion(cfd, sv);
+      if (!is_user_sv) {
+        ReturnAndCleanupSuperVersion(cfd, sv);
+      }
       return s;
     }
   }
   if (!done) {
     PERF_TIMER_GUARD(get_from_output_files_time);
     sv->current->Get(read_options, lkey, pinnable_val, &s, &merge_context,
-                     &range_del_agg, value_found, nullptr, nullptr, callback,
+                     &range_del_agg, value_found, nullptr, &seq, callback,
                      is_blob_index);
+    if (s.ok() && is_blob_index != nullptr && *is_blob_index && seq > snapshot) {
+      fprintf(stderr, "snapshot:%lu seq:%lu\n", snapshot, seq);
+      abort();
+    }
     RecordTick(stats_, MEMTABLE_MISS);
   }
 
   {
     PERF_TIMER_GUARD(get_post_process_time);
 
-    ReturnAndCleanupSuperVersion(cfd, sv);
+    if (!is_user_sv) {
+      ReturnAndCleanupSuperVersion(cfd, sv);
+    }
 
     RecordTick(stats_, NUMBER_KEYS_READ);
     size_t size = pinnable_val->size();
@@ -1192,8 +1211,7 @@ std::vector<Status> DBImpl::MultiGet(
 
   mutex_.Lock();
   if (read_options.snapshot != nullptr) {
-    snapshot =
-        reinterpret_cast<const SnapshotImpl*>(read_options.snapshot)->number_;
+    snapshot = read_options.snapshot->GetSequenceNumber();
   } else {
     snapshot = last_seq_same_as_publish_seq_
                    ? versions_->LastSequence()
@@ -1629,8 +1647,9 @@ ArenaWrappedDBIter* DBImpl::NewIteratorImpl(const ReadOptions& read_options,
                                             SequenceNumber snapshot,
                                             ReadCallback* read_callback,
                                             bool allow_blob,
-                                            bool allow_refresh) {
-  SuperVersion* sv = cfd->GetReferencedSuperVersion(&mutex_);
+                                            bool allow_refresh,
+                                            SuperVersion* sv) {
+  sv = sv == nullptr ? cfd->GetReferencedSuperVersion(&mutex_) : sv;
 
   // Try to generate a DB iterator tree in continuous memory area to be
   // cache friendly. Here is an example of result:
@@ -2007,6 +2026,10 @@ SuperVersion* DBImpl::GetAndRefSuperVersion(uint32_t column_family_id) {
   }
 
   return GetAndRefSuperVersion(cfd);
+}
+
+SuperVersion* DBImpl::GetReferencedSuperVersion(ColumnFamilyData* cfd) {
+  return cfd->GetReferencedSuperVersion(&mutex_);
 }
 
 void DBImpl::CleanupSuperVersion(SuperVersion* sv) {

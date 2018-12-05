@@ -73,7 +73,9 @@ Version::~Version() {
       if (f.second.use_count() > 1) continue;
       // TODO(@DorianZheng) We need to judge file state, In case encoutering
       // some unexpected behaviour
-//      assert(!f.second->being_gc.load(std::memory_order_relaxed));
+      assert(!f.second->being_gc);
+      assert(!f.second->pending);
+      assert(!f.second->pending_gc);
       obsolete_blob_files.emplace_back(f.second->file_number);
     }
   }

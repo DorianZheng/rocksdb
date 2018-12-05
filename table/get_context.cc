@@ -3,6 +3,7 @@
 //  COPYING file in the root directory) and Apache 2.0 License
 //  (found in the LICENSE.Apache file in the root directory).
 
+#include <utilities/titandb/blob_format.h>
 #include "table/get_context.h"
 #include "db/merge_helper.h"
 #include "db/pinned_iterators_manager.h"
@@ -132,6 +133,9 @@ bool GetContext::SaveValue(const ParsedInternalKey& parsed_key,
         assert(state_ == kNotFound || state_ == kMerge);
         if (type == kTypeBlobIndex && is_blob_index_ == nullptr) {
           // Blob value not supported. Stop.
+          titandb::BlobIndex bi;
+          bi.DecodeFrom(&const_cast<Slice &>(value));
+          fprintf(stderr, "table key:%s seq:%lu type:%d fn:%lu\n", parsed_key.user_key.ToString(true).c_str(), parsed_key.sequence, (int)type, bi.file_number);
           state_ = kBlobIndex;
           return false;
         }

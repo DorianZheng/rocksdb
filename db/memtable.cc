@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <utilities/titandb/blob_format.h>
 
 #include "db/dbformat.h"
 #include "db/merge_context.h"
@@ -619,6 +620,16 @@ static bool SaveValue(void* arg, const char* entry) {
       return true;  // to continue to the next seq
     }
 
+    const uint64_t tag2 = DecodeFixed64(s->key->internal_key().data() + s->key->internal_key().size() - 8);
+    ValueType type2;
+    SequenceNumber seq2;
+    UnPackSequenceAndType(tag2, &seq2, &type2);
+
+    if (seq > seq2) {
+      fprintf(stderr, "key:%s seq:%lu seq2:%lu  type:%d", s->key->internal_key().ToString(true).c_str(), seq, seq2, (int)type);
+      abort();
+    }
+
     s->seq = seq;
 
     if ((type == kTypeValue || type == kTypeMerge || type == kTypeBlobIndex) &&
@@ -628,6 +639,10 @@ static bool SaveValue(void* arg, const char* entry) {
     switch (type) {
       case kTypeBlobIndex:
         if (s->is_blob_index == nullptr) {
+          Slice tv = GetLengthPrefixedSlice(key_ptr + key_length);
+          titandb::BlobIndex bi;
+          bi.DecodeFrom(&tv);
+          fprintf(stderr, "mem key:%s seq:%lu type:%d fn:%lu\n", s->key->internal_key().ToString(true).c_str(), seq, (int)type, bi.file_number);
           ROCKS_LOG_ERROR(s->logger, "Encounter unexpected blob index.");
           *(s->status) = Status::NotSupported(
               "Encounter unsupported blob value. Please open DB with "
