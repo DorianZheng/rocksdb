@@ -80,20 +80,15 @@ class TitanDBImpl : public TitanDB {
 
   // REQUIRE: mutex_ held
   void AddToGCQueue(uint32_t column_family_id) {
-    if (pending_gc_.find(column_family_id) != pending_gc_.end()) return;
     gc_queue_.push_back(column_family_id);
-    pending_gc_.insert(column_family_id);
   }
 
   // REQUIRE: gc_queue_ not empty
   // REQUIRE: mutex_ held
   uint32_t PopFirstFromGCQueue() {
     assert(!gc_queue_.empty());
-    assert(!pending_gc_.empty());
     auto column_family_id = *gc_queue_.begin();
     gc_queue_.pop_front();
-    assert(pending_gc_.count(column_family_id) != 0);
-    pending_gc_.erase(column_family_id);
     return column_family_id;
   }
 
@@ -130,7 +125,6 @@ class TitanDBImpl : public TitanDB {
   // gc_queue_ hold column families that we need to gc.
   // pending_gc_ hold column families that already on gc_queue_.
   std::deque<uint32_t> gc_queue_;
-  std::set<uint32_t> pending_gc_;
 
   std::atomic_int bg_gc_scheduled_{0};
 
