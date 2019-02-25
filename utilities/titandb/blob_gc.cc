@@ -77,7 +77,7 @@ void BlobGc::ReleaseGcFiles() {
 
 void BlobGc::InputSummary(char* output, int len) {
   int write =
-      snprintf(output, len, "Base version %" PRIu64 ", Raw Inputs: %lu [",
+      snprintf(output, len, "Base version %" PRIu64 ", Raw inputs: %lu [",
                current_->version_number(), inputs_.size());
   if (write < 0 || write >= len) {
     return;
@@ -93,7 +93,7 @@ void BlobGc::InputSummary(char* output, int len) {
 
 void BlobGc::OutputSummary(char* output, int len) {
   int write =
-      snprintf(output, len, "Base version %" PRIu64 ", Sampled Inputs: %lu [",
+      snprintf(output, len, "Base version %" PRIu64 ", Sampled inputs: %lu [",
                current_->version_number(), sampled_inputs_.size());
   if (write < 0 || write >= len) {
     return;
@@ -104,12 +104,12 @@ void BlobGc::OutputSummary(char* output, int len) {
     return;
   }
 
-  snprintf(output + write, len - write, "], Outputs: %lu [", outputs_.size());
+  write += snprintf(output + write, len - write, "], Outputs: %lu [", outputs_.size());
   if (write < 0 || write >= len) {
     return;
   }
 
-  write += BlobFileSummary(sampled_inputs_, output + write, len - write);
+  write += BlobFileSummary(outputs_, output + write, len - write);
   if (write < 0 || write >= len) {
     return;
   }
