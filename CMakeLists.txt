@@ -676,6 +676,7 @@ set(SOURCES
         utilities/titandb/blob_format.cc
         utilities/titandb/blob_gc.cc
         utilities/titandb/blob_gc_job.cc
+        utilities/titandb/blob_gc_job_stats.cc
         utilities/titandb/blob_gc_picker.cc
         utilities/titandb/db.cc
         utilities/titandb/db_impl.cc

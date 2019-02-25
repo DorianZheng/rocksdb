@@ -77,7 +77,11 @@ class BlobStorage {
 
 class Version {
  public:
-  Version(VersionSet* vset) : vset_(vset), prev_(this), next_(this) {}
+  Version(VersionSet* vset, uint64_t version_number)
+      : vset_(vset),
+        prev_(this),
+        next_(this),
+        version_number_(version_number) {}
 
   // Reference count management.
   void Ref();
@@ -97,6 +101,8 @@ class Version {
     }
   }
 
+  uint64_t version_number() { return version_number_; }
+
  private:
   friend class VersionList;
   friend class VersionBuilder;
@@ -111,12 +117,13 @@ class Version {
   Version* prev_;
   Version* next_;
   std::map<uint32_t, std::shared_ptr<BlobStorage>> column_families_;
+
+  uint64_t version_number_;
 };
 
 class VersionList {
  public:
   VersionList();
-
   ~VersionList();
 
   Version* current() { return current_; }
@@ -124,7 +131,7 @@ class VersionList {
   void Append(Version* v);
 
  private:
-  Version list_{nullptr};
+  Version* dummy_version_;
   Version* current_{nullptr};
 };
 

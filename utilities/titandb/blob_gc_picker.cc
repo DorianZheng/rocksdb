@@ -9,7 +9,7 @@ BasicBlobGCPicker::BasicBlobGCPicker(TitanDBOptions db_options,
 
 BasicBlobGCPicker::~BasicBlobGCPicker() {}
 
-std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
+std::unique_ptr<BlobGc> BasicBlobGCPicker::PickBlobGC(
     BlobStorage* blob_storage) {
   Status s;
   std::vector<BlobFileMeta*> blob_files;
@@ -45,8 +45,8 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
   if (blob_files.empty() || batch_size < cf_options_.min_gc_batch_size)
     return nullptr;
 
-  return std::unique_ptr<BlobGC>(
-      new BlobGC(std::move(blob_files), std::move(cf_options_)));
+  return std::unique_ptr<BlobGc>(
+      new BlobGc(std::move(blob_files), std::move(cf_options_)));
 }
 
 bool BasicBlobGCPicker::CheckBlobFile(BlobFileMeta* blob_file) const {

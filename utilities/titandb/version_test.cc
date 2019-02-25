@@ -52,7 +52,7 @@ class VersionTest : public testing::Test {
     versions_.reset(new VersionList);
     column_families_.clear();
     // Sets up some column families.
-    auto v = new Version(nullptr);
+    auto v = new Version(nullptr, 0);
     for (uint32_t id = 0; id < 10; id++) {
       std::shared_ptr<BlobStorage> storage;
       storage.reset(new BlobStorage(cf_options_, file_cache_));
@@ -83,7 +83,7 @@ class VersionTest : public testing::Test {
     for (auto& edit : edits) {
       builder.Apply(&edit);
     }
-    Version* v = new Version(vset_.get());
+    Version* v = new Version(vset_.get(), 0);
     builder.SaveTo(v);
     versions_->Append(v);
     for (auto& it : v->column_families_) {

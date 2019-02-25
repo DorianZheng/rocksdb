@@ -212,11 +212,11 @@ Status TitanDBImpl::Close() {
 Status TitanDBImpl::CloseImpl() {
   {
     MutexLock l(&mutex_);
-    // Although `shuting_down_` is atomic bool object, we should set it under
+    // Although `shutting_down_` is atomic bool object, we should set it under
     // the protection of mutex_, otherwise, there maybe something wrong with it,
     // like:
-    // 1, A thread: shuting_down_.load = false
-    // 2, B thread: shuting_down_.store(true)
+    // 1, A thread: shutting_down_.load = false
+    // 2, B thread: shutting_down_.store(true)
     // 3, B thread: unschedule all bg work
     // 4, A thread: schedule bg work
     shuting_down_.store(true, std::memory_order_release);

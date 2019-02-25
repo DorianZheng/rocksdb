@@ -99,6 +99,10 @@ bool operator==(const BlobHandle& lhs, const BlobHandle& rhs) {
   return lhs.offset == rhs.offset && lhs.size == rhs.size;
 }
 
+bool operator!=(const BlobHandle& lhs, const BlobHandle& rhs) {
+  return lhs.offset != rhs.offset || lhs.size != rhs.size;
+}
+
 void BlobIndex::EncodeTo(std::string* dst) const {
   dst->push_back(kBlobRecord);
   PutVarint64(dst, file_number);
@@ -121,6 +125,11 @@ Status BlobIndex::DecodeFrom(Slice* src) {
 bool operator==(const BlobIndex& lhs, const BlobIndex& rhs) {
   return (lhs.file_number == rhs.file_number &&
           lhs.blob_handle == rhs.blob_handle);
+}
+
+bool operator!=(const BlobIndex& lhs, const BlobIndex& rhs) {
+  return (lhs.file_number != rhs.file_number ||
+          lhs.blob_handle != rhs.blob_handle);
 }
 
 void BlobFileMeta::EncodeTo(std::string* dst) const {

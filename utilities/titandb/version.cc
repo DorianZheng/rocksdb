@@ -53,7 +53,13 @@ void BlobStorage::ComputeGCScore() {
 
   std::sort(gc_score_.begin(), gc_score_.end(),
             [](const GCScore& first, const GCScore& second) {
-              return first.score > second.score;
+              if (first.score > second.score) {
+                return true;
+              } else if (first.score < second.score) {
+                return false;
+              } else {
+                return first.file_number < second.file_number;
+              }
             });
 }
 
@@ -110,26 +116,29 @@ std::weak_ptr<BlobStorage> Version::GetBlobStorage(uint32_t cf_id) {
   return std::weak_ptr<BlobStorage>();
 }
 
-VersionList::VersionList() { Append(new Version(nullptr)); }
+VersionList::VersionList() : dummy_version_(new Version(nullptr, 0)) {
+  dummy_version_->Ref();
+  current_ = dummy_version_;
+  current_->Ref();
+}
 
 VersionList::~VersionList() {
   current_->Unref();
-  assert(list_.prev_ == &list_);
-  assert(list_.next_ == &list_);
+  assert(dummy_version_->prev_ == dummy_version_);
+  assert(dummy_version_->next_ == dummy_version_);
+  dummy_version_->Unref();
 }
 
 void VersionList::Append(Version* v) {
   assert(v->refs_ == 0);
   assert(v != current_);
 
-  if (current_) {
-    current_->Unref();
-  }
+  current_->Unref();
   current_ = v;
   current_->Ref();
 
-  v->prev_ = list_.prev_;
-  v->next_ = &list_;
+  v->prev_ = dummy_version_->prev_;
+  v->next_ = dummy_version_;
   v->prev_->next_ = v;
   v->next_->prev_ = v;
 }

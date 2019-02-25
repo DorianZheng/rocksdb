@@ -1,5 +1,9 @@
 #include "utilities/titandb/version_set.h"
 
+#ifndef __STDC_FORMAT_MACROS
+#define __STDC_FORMAT_MACROS
+#endif
+
 #include <inttypes.h>
 
 #include "util/filename.h"
@@ -95,7 +99,7 @@ Status VersionSet::Recover() {
   }
   next_file_number_.store(next_file_number);
 
-  auto v = new Version(this);
+  auto v = new Version(this, next_version_number_++);
   {
     builder.SaveTo(v);
     versions_.Append(v);
@@ -207,7 +211,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mutex) {
   }
   if (!s.ok()) return s;
 
-  auto v = new Version(this);
+  auto v = new Version(this, next_version_number_++);
   {
     VersionBuilder builder(current());
     builder.Apply(edit);
@@ -219,7 +223,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mutex) {
 
 void VersionSet::AddColumnFamilies(
     const std::map<uint32_t, TitanCFOptions>& column_families) {
-  auto v = new Version(this);
+  auto v = new Version(this, 0);
   v->column_families_ = current()->column_families_;
   for (auto& cf : column_families) {
     auto file_cache =
@@ -232,7 +236,7 @@ void VersionSet::AddColumnFamilies(
 
 void VersionSet::DropColumnFamilies(
     const std::vector<uint32_t>& column_families) {
-  auto v = new Version(this);
+  auto v = new Version(this, 0);
   v->column_families_ = current()->column_families_;
   for (auto& cf : column_families) {
     v->column_families_.erase(cf);

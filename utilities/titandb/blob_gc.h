@@ -11,17 +11,17 @@ namespace titandb {
 
 class Version;
 
-// A BlobGC encapsulates information about a blob gc.
-class BlobGC {
+// A BlobGc encapsulates information about a blob gc.
+class BlobGc {
  public:
-  BlobGC(std::vector<BlobFileMeta*>&& blob_files,
+  BlobGc(std::vector<BlobFileMeta*>&& blob_files,
          TitanCFOptions&& _titan_cf_options);
 
   // No copying allowed
-  BlobGC(const BlobGC&) = delete;
-  void operator=(const BlobGC&) = delete;
+  BlobGc(const BlobGc&) = delete;
+  void operator=(const BlobGc&) = delete;
 
-  ~BlobGC();
+  ~BlobGc();
 
   const std::vector<BlobFileMeta*>& inputs() { return inputs_; }
 
@@ -44,6 +44,10 @@ class BlobGC {
   void AddOutputFile(BlobFileMeta*);
 
   void ReleaseGcFiles();
+
+  void InputSummary(char* output, int len);
+
+  void OutputSummary(char* output, int len);
 
  private:
   std::vector<BlobFileMeta*> inputs_;

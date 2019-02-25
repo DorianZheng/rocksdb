@@ -5,70 +5,64 @@ namespace titandb {
 
 // Write callback for garbage collection to check if key has been updated
 // since last read. Similar to how OptimisticTransaction works.
-class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
+class BlobGcJob::GcWriteCallback : public WriteCallback {
  public:
-  GarbageCollectionWriteCallback(ColumnFamilyHandle* cfh, std::string&& _key,
-                                 BlobIndex&& blob_index)
-      : cfh_(cfh), key_(std::move(_key)), blob_index_(blob_index) {
-    assert(!key_.empty());
-  }
+  GcWriteCallback(ColumnFamilyHandle* cfh, std::string&& _key,
+                  const BlobIndex& index)
+      : cfh_(cfh), key_(std::move(_key)), origin_index_(index) {}
 
-  std::string value;
-
-  virtual Status Callback(DB* db) override {
+  Status Callback(DB* db) override {
     auto* db_impl = reinterpret_cast<DBImpl*>(db);
-    PinnableSlice index_entry;
+    PinnableSlice value;
     bool is_blob_index;
-    auto s = db_impl->GetImpl(ReadOptions(), cfh_, key_, &index_entry,
+    auto s = db_impl->GetImpl(ReadOptions(), cfh_, key_, &value,
                               nullptr /*value_found*/,
                               nullptr /*read_callback*/, &is_blob_index);
     if (!s.ok() && !s.IsNotFound()) {
-      fprintf(stderr, "GetImpl err, status:%s\n", s.ToString().c_str());
-      abort();
-    }
-    if (s.IsNotFound()) {
-      // Either the key is deleted or updated with a newer version which is
-      // inlined in LSM.
+      // Error.
+      assert(!s.IsBusy());
+    } else if (s.IsNotFound()) {
       s = Status::Busy("key deleted");
     } else if (!is_blob_index) {
-      s = Status::Busy("key overwritten with other value");
+      s = Status::Busy("key overwritten");
     }
 
     if (s.ok()) {
-      BlobIndex other_blob_index;
-      s = other_blob_index.DecodeFrom(&index_entry);
+      BlobIndex cur_index;
+      s = cur_index.DecodeFrom(&value);
       if (!s.ok()) {
-        fprintf(stderr, "Decode blob index [%s] failed, err:%s\n",
-                index_entry.ToString(true).c_str(), s.ToString().c_str());
-        abort();
-      }
-
-      if (!(blob_index_ == other_blob_index)) {
-        s = Status::Busy("key overwritten with other blob");
+        assert(!s.IsBusy());
+      } else if (cur_index != origin_index_) {
+        s = Status::Busy("key overwritten");
       }
     }
 
     return s;
   }
 
-  virtual bool AllowWriteBatching() override { return false; }
-
-  std::string key() { return key_; }
+  bool AllowWriteBatching() override { return false; }
 
  private:
   ColumnFamilyHandle* cfh_;
   // Key to check
   std::string key_;
-  BlobIndex blob_index_;
+  // Original blob index
+  BlobIndex origin_index_;
 };
 
-BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
-                     const TitanDBOptions& titan_db_options, Env* env,
+BlobGcJob::BlobGcJob(uint64_t job_id,
+                     BlobGc* blob_gc,
+                     DB* db,
+                     port::Mutex* mutex,
+                     const TitanDBOptions& titan_db_options,
+                     Env* env,
                      const EnvOptions& env_options,
                      BlobFileManager* blob_file_manager,
-                     VersionSet* version_set, LogBuffer* log_buffer,
-                     std::atomic_bool* shuting_down)
-    : blob_gc_(blob_gc),
+                     VersionSet* version_set,
+                     LogBuffer* log_buffer,
+                     std::atomic_bool* shutting_down)
+    : job_id_(job_id),
+      blob_gc_(blob_gc),
       base_db_(db),
       base_db_impl_(reinterpret_cast<DBImpl*>(base_db_)),
       mutex_(mutex),
@@ -77,49 +71,32 @@ BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
       env_options_(env_options),
       blob_file_manager_(blob_file_manager),
       version_set_(version_set),
-      log_buffer_(log_buffer),
-      shuting_down_(shuting_down) {}
+      shutting_down_(shutting_down),
+      log_buffer_(log_buffer) {}
 
-BlobGCJob::~BlobGCJob() {
+BlobGcJob::~BlobGcJob() {
   if (cmp_) delete cmp_;
 }
 
-Status BlobGCJob::Prepare() { return Status::OK(); }
+Status BlobGcJob::Prepare() { return Status::OK(); }
 
-Status BlobGCJob::Run() {
-  Status s;
-
-  s = SampleCandidateFiles();
-
-  std::string tmp;
-  for (const auto& f : blob_gc_->inputs()) {
-    if (!tmp.empty()) {
-      tmp.append(" ");
-    }
-    tmp.append(std::to_string(f->file_number()));
-  }
-
-  std::string tmp2;
-  for (const auto& f : blob_gc_->sampled_inputs()) {
-    if (!tmp2.empty()) {
-      tmp2.append(" ");
-    }
-    tmp2.append(std::to_string(f->file_number()));
-  }
-
-  ROCKS_LOG_BUFFER(log_buffer_, "[%s] Titan GC candidates[%s] selected[%s]",
-                   blob_gc_->column_family_handle()->GetName().c_str(),
-                   tmp.c_str(), tmp2.c_str());
-
+Status BlobGcJob::Run() {
   log_buffer_->FlushBufferToLog();
-  LogFlush(db_options_.info_log.get());
+  LogGcOnStart();
+
+  auto s = SampleCandidateFiles();
 
   if (!s.ok()) return s;
 
-  return DoRunGC();
+  s = DoRunGC();
+
+  LogGcOnFinish();
+  LogFlush(db_options_.info_log.get());
+
+  return s;
 }
 
-Status BlobGCJob::SampleCandidateFiles() {
+Status BlobGcJob::SampleCandidateFiles() {
   std::vector<BlobFileMeta*> result;
   for (const auto& file : blob_gc_->inputs()) {
     if (DoSample(file)) {
@@ -134,7 +111,7 @@ Status BlobGCJob::SampleCandidateFiles() {
   return Status::OK();
 }
 
-bool BlobGCJob::DoSample(const BlobFileMeta* file) {
+bool BlobGcJob::DoSample(const BlobFileMeta* file) {
   if (file->GetDiscardableRatio() >=
       blob_gc_->titan_cf_options().blob_file_discardable_ratio) {
     return true;
@@ -192,7 +169,7 @@ bool BlobGCJob::DoSample(const BlobFileMeta* file) {
              blob_gc_->titan_cf_options().blob_file_discardable_ratio;
 }
 
-Status BlobGCJob::DoRunGC() {
+Status BlobGcJob::DoRunGC() {
   Status s;
 
   std::unique_ptr<BlobFileMergeIterator> gc_iter;
@@ -225,7 +202,7 @@ Status BlobGCJob::DoRunGC() {
   gc_iter->SeekToFirst();
   assert(gc_iter->Valid());
   for (; gc_iter->Valid(); gc_iter->Next()) {
-    if (IsShutingDown()) {
+    if (IsShuttingDown()) {
       s = Status::ShutdownInProgress();
       break;
     }
@@ -279,9 +256,8 @@ Status BlobGCJob::DoRunGC() {
     new_blob_index.EncodeTo(&index_entry);
 
     // Store WriteBatch for rewriting new Key-Index pairs to LSM
-    GarbageCollectionWriteCallback callback(cfh, blob_record.key.ToString(),
-                                            std::move(blob_index));
-    callback.value = index_entry;
+    GcWriteCallback callback(cfh, blob_record.key.ToString(),
+                             std::move(blob_index));
     rewrite_batches_.emplace_back(
         std::make_pair(WriteBatch(), std::move(callback)));
     auto& wb = rewrite_batches_.back().first;
@@ -308,7 +284,7 @@ Status BlobGCJob::DoRunGC() {
   return s;
 }
 
-Status BlobGCJob::BuildIterator(unique_ptr<BlobFileMergeIterator>* result) {
+Status BlobGcJob::BuildIterator(unique_ptr<BlobFileMergeIterator>* result) {
   Status s;
   const auto& inputs = blob_gc_->sampled_inputs();
   assert(!inputs.empty());
@@ -331,7 +307,7 @@ Status BlobGCJob::BuildIterator(unique_ptr<BlobFileMergeIterator>* result) {
   return s;
 }
 
-bool BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index) {
+bool BlobGcJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index) {
   PinnableSlice index_entry;
   bool is_blob_index;
   auto s = base_db_impl_->GetImpl(
@@ -359,7 +335,7 @@ bool BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index) {
 // We have to make sure crash consistency, but LSM db MANIFEST and BLOB db
 // MANIFEST are separate, so we need to make sure all new blob file have
 // added to db before we rewrite any key to LSM
-Status BlobGCJob::Finish() {
+Status BlobGcJob::Finish() {
   Status s;
   {
     mutex_->Unlock();
@@ -377,7 +353,7 @@ Status BlobGCJob::Finish() {
   return s;
 }
 
-Status BlobGCJob::InstallOutputBlobFiles() {
+Status BlobGcJob::InstallOutputBlobFiles() {
   Status s;
   for (auto& builder : blob_file_builders_) {
     s = builder.second->Finish();
@@ -406,7 +382,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
   return s;
 }
 
-Status BlobGCJob::RewriteValidKeyToLSM() {
+Status BlobGcJob::RewriteValidKeyToLSM() {
   Status s;
   auto* db_impl = reinterpret_cast<DBImpl*>(this->base_db_);
 
@@ -418,7 +394,7 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
       s = Status::Aborted("Column family drop");
       break;
     }
-    if (IsShutingDown()) {
+    if (IsShuttingDown()) {
       s = Status::ShutdownInProgress();
       break;
     }
@@ -443,7 +419,7 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
   return s;
 }
 
-Status BlobGCJob::DeleteInputBlobFiles() const {
+Status BlobGcJob::DeleteInputBlobFiles() const {
   Status s;
   VersionEdit edit;
   edit.SetColumnFamilyID(blob_gc_->column_family_handle()->GetID());
@@ -458,8 +434,30 @@ Status BlobGCJob::DeleteInputBlobFiles() const {
   return s;
 }
 
-bool BlobGCJob::IsShutingDown() {
-  return (shuting_down_ && shuting_down_->load(std::memory_order_acquire));
+bool BlobGcJob::IsShuttingDown() {
+  return (shutting_down_ && shutting_down_->load(std::memory_order_acquire));
+}
+
+void BlobGcJob::LogGcOnStart() {
+  // Let's check if anything will get logged. Don't prepare all the info if
+  // we're not logging
+  if (db_options_.info_log_level <= InfoLogLevel::INFO_LEVEL) {
+    char scratch[4096];
+    blob_gc_->InputSummary(scratch, sizeof(scratch));
+    ROCKS_LOG_INFO(db_options_.info_log, "[%s] GC start summary: %s\n",
+                   blob_gc_->GetColumnFamilyData()->GetName().c_str(), scratch);
+  }
+}
+
+void BlobGcJob::LogGcOnFinish() {
+  // Let's check if anything will get logged. Don't prepare all the info if
+  // we're not logging
+  if (db_options_.info_log_level <= InfoLogLevel::INFO_LEVEL) {
+    char scratch[4096];
+    blob_gc_->OutputSummary(scratch, sizeof(scratch));
+    ROCKS_LOG_INFO(db_options_.info_log, "[%s] GC finish summary: %s\n",
+                   blob_gc_->GetColumnFamilyData()->GetName().c_str(), scratch);
+  }
 }
 
 }  // namespace titandb

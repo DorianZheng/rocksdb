@@ -75,6 +75,7 @@ struct BlobHandle {
   Status DecodeFrom(Slice* src);
 
   friend bool operator==(const BlobHandle& lhs, const BlobHandle& rhs);
+  friend bool operator!=(const BlobHandle& lhs, const BlobHandle& rhs);
 };
 
 // Blob index format:
@@ -93,6 +94,7 @@ struct BlobIndex {
   Status DecodeFrom(Slice* src);
 
   friend bool operator==(const BlobIndex& lhs, const BlobIndex& rhs);
+  friend bool operator!=(const BlobIndex& lhs, const BlobIndex& rhs);
 };
 
 // Blob file meta format:

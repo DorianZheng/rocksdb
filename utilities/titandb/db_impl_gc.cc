@@ -63,7 +63,7 @@ void TitanDBImpl::BackgroundCallGC() {
 Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
   mutex_.AssertHeld();
 
-  std::unique_ptr<BlobGC> blob_gc;
+  std::unique_ptr<BlobGc> blob_gc;
   std::unique_ptr<ColumnFamilyHandle> cfh;
   Status s;
 
@@ -90,9 +90,17 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
     // Nothing to do
     ROCKS_LOG_BUFFER(log_buffer, "Titan GC nothing to do");
   } else {
-    BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_, env_,
-                          env_options_, blob_manager_.get(), vset_.get(),
-                          log_buffer, &shuting_down_);
+    BlobGcJob blob_gc_job(0,
+                          blob_gc.get(),
+                          db_,
+                          &mutex_,
+                          db_options_,
+                          env_,
+                          env_options_,
+                          blob_manager_.get(),
+                          vset_.get(),
+                          log_buffer,
+                          &shuting_down_);
     s = blob_gc_job.Prepare();
 
     if (s.ok()) {

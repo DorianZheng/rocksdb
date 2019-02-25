@@ -6,25 +6,32 @@
 #include "utilities/titandb/blob_file_iterator.h"
 #include "utilities/titandb/blob_file_manager.h"
 #include "utilities/titandb/blob_gc.h"
+#include "utilities/titandb/blob_gc_job_stats.h"
 #include "utilities/titandb/options.h"
 #include "utilities/titandb/version_set.h"
 
 namespace rocksdb {
 namespace titandb {
 
-class BlobGCJob {
+class BlobGcJob {
  public:
-  BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
-            const TitanDBOptions& titan_db_options, Env* env,
-            const EnvOptions& env_options, BlobFileManager* blob_file_manager,
-            VersionSet* version_set, LogBuffer* log_buffer,
-            std::atomic_bool* shuting_down);
+  BlobGcJob(uint64_t job_id,
+              BlobGc* blob_gc,
+              DB* db,
+              port::Mutex* mutex,
+              const TitanDBOptions& titan_db_options,
+              Env* env,
+              const EnvOptions& env_options,
+              BlobFileManager* blob_file_manager,
+              VersionSet* version_set,
+              LogBuffer* log_buffer,
+              std::atomic_bool* shutting_down);
 
   // No copying allowed
-  BlobGCJob(const BlobGCJob&) = delete;
-  void operator=(const BlobGCJob&) = delete;
+  BlobGcJob(const BlobGcJob&) = delete;
+  void operator=(const BlobGcJob&) = delete;
 
-  ~BlobGCJob();
+  ~BlobGcJob();
 
   // REQUIRE: mutex held
   Status Prepare();
@@ -34,10 +41,11 @@ class BlobGCJob {
   Status Finish();
 
  private:
-  class GarbageCollectionWriteCallback;
+  class GcWriteCallback;
   friend class BlobGCJobTest;
 
-  BlobGC* blob_gc_;
+  uint64_t job_id_;
+  BlobGc* blob_gc_;
   DB* base_db_;
   DBImpl* base_db_impl_;
   port::Mutex* mutex_;
@@ -46,16 +54,21 @@ class BlobGCJob {
   EnvOptions env_options_;
   BlobFileManager* blob_file_manager_;
   titandb::VersionSet* version_set_;
-  LogBuffer* log_buffer_{nullptr};
 
   std::vector<std::pair<std::unique_ptr<BlobFileHandle>,
                         std::unique_ptr<BlobFileBuilder>>>
       blob_file_builders_;
-  std::vector<std::pair<WriteBatch, GarbageCollectionWriteCallback>>
-      rewrite_batches_;
+  std::vector<std::pair<WriteBatch, GcWriteCallback>> rewrite_batches_;
   InternalKeyComparator* cmp_{nullptr};
 
-  std::atomic_bool* shuting_down_{nullptr};
+  std::atomic_bool* shutting_down_{nullptr};
+
+  LogBuffer* log_buffer_{nullptr};
+  // Unified interface for logging events
+  EventLogger* event_logger_;
+
+  // stats
+  BlobGcJobStats* blob_gc_job_stats_;
 
   Status SampleCandidateFiles();
   bool DoSample(const BlobFileMeta* file);
@@ -66,7 +79,10 @@ class BlobGCJob {
   Status RewriteValidKeyToLSM();
   Status DeleteInputBlobFiles() const;
 
-  bool IsShutingDown();
+  bool IsShuttingDown();
+
+  void LogGcOnStart();
+  void LogGcOnFinish();
 };
 
 }  // namespace titandb

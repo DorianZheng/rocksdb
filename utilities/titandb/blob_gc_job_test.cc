@@ -75,13 +75,13 @@ class BlobGCJobTest : public testing::Test {
     Status s;
     auto* cfh = base_db_->DefaultColumnFamily();
 
-    // Build BlobGC
+    // Build BlobGc
     TitanDBOptions db_options;
     TitanCFOptions cf_options;
     LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL, db_options.info_log.get());
     cf_options.min_gc_batch_size = 0;
 
-    std::unique_ptr<BlobGC> blob_gc;
+    std::unique_ptr<BlobGc> blob_gc;
     {
       std::shared_ptr<BlobGCPicker> blob_gc_picker =
           std::make_shared<BasicBlobGCPicker>(db_options, cf_options);
@@ -91,9 +91,17 @@ class BlobGCJobTest : public testing::Test {
     }
     ASSERT_TRUE(blob_gc);
 
-    BlobGCJob blob_gc_job(blob_gc.get(), base_db_, mutex_, tdb_->db_options_,
-                          tdb_->env_, EnvOptions(), tdb_->blob_manager_.get(),
-                          version_set_, &log_buffer, nullptr);
+    BlobGcJob blob_gc_job(0,
+                          blob_gc.get(),
+                          base_db_,
+                          mutex_,
+                          tdb_->db_options_,
+                          tdb_->env_,
+                          EnvOptions(),
+                          tdb_->blob_manager_.get(),
+                          version_set_,
+                          &log_buffer,
+                          nullptr);
 
     s = blob_gc_job.Prepare();
     ASSERT_OK(s);
@@ -137,11 +145,19 @@ class BlobGCJobTest : public testing::Test {
     auto rewrite_status = base_db_->Write(WriteOptions(), &wb);
 
     std::vector<BlobFileMeta*> tmp;
-    BlobGC blob_gc(std::move(tmp), TitanCFOptions());
+    BlobGc blob_gc(std::move(tmp), TitanCFOptions());
     blob_gc.SetInputVersion(cfh, version_set_->current());
-    BlobGCJob blob_gc_job(&blob_gc, base_db_, mutex_, TitanDBOptions(),
-                          Env::Default(), EnvOptions(), nullptr, version_set_,
-                          nullptr, nullptr);
+    BlobGcJob blob_gc_job(0,
+                          &blob_gc,
+                          base_db_,
+                          mutex_,
+                          TitanDBOptions(),
+                          Env::Default(),
+                          EnvOptions(),
+                          nullptr,
+                          version_set_,
+                          nullptr,
+                          nullptr);
     ASSERT_FALSE(blob_gc_job.DiscardEntry(key, blob_index));
     DestoyDB();
   }
