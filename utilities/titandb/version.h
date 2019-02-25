@@ -77,11 +77,11 @@ class BlobStorage {
 
 class Version {
  public:
-  Version(VersionSet* vset, uint64_t version_number)
+  Version(VersionSet* vset, uint64_t _version_number)
       : vset_(vset),
         prev_(this),
         next_(this),
-        version_number_(version_number) {}
+        version_number_(_version_number) {}
 
   // Reference count management.
   void Ref();
