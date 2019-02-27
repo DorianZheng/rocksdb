@@ -104,7 +104,8 @@ void BlobGc::OutputSummary(char* output, int len) {
     return;
   }
 
-  write += snprintf(output + write, len - write, "], Outputs: %lu [", outputs_.size());
+  write += snprintf(output + write, len - write, "], Outputs: %lu [",
+                    outputs_.size());
   if (write < 0 || write >= len) {
     return;
   }

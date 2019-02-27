@@ -36,29 +36,26 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     return s;
   }
 
-  Status BatchFinishFiles(
-      uint32_t cf_id,
-      const std::vector<std::pair<std::shared_ptr<BlobFileMeta>,
-                                  std::unique_ptr<BlobFileHandle>>>& files)
-      override {
+  Status BatchFinishFiles(uint32_t cf_id,
+                          const std::vector<BlobFilePair>& files) override {
     Status s;
     VersionEdit edit;
     edit.SetColumnFamilyID(cf_id);
     for (auto& file : files) {
-      s = file.second->GetFile()->Sync(false);
+      s = file.handle->GetFile()->Sync(false);
       if (s.ok()) {
-        s = file.second->GetFile()->Close();
+        s = file.handle->GetFile()->Close();
       }
       if (!s.ok()) return s;
 
-      edit.AddBlobFile(file.first);
+      edit.AddBlobFile(file.meta);
     }
 
     {
       MutexLock l(&db_->mutex_);
       s = db_->vset_->LogAndApply(&edit, &db_->mutex_);
       for (const auto& file : files)
-        db_->pending_outputs_.erase(file.second->GetNumber());
+        db_->pending_outputs_.erase(file.handle->GetNumber());
     }
     return s;
   }

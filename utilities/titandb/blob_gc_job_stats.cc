@@ -4,8 +4,7 @@ namespace rocksdb {
 namespace titandb {
 
 void BlobGcJobStats::Reset() {
-  start_micors = 0;
-  finish_micors = 0;
+  micros = 0;
 
   num_input_records = 0;
   num_input_files = 0;
@@ -15,6 +14,7 @@ void BlobGcJobStats::Reset() {
 
   total_input_bytes = 0;
   total_output_bytes = 0;
+  estimated_total_output_bytes = 0;
 
   num_records_replaced = 0;
 
@@ -33,6 +33,8 @@ void BlobGcJobStats::Reset() {
 }
 
 void BlobGcJobStats::Add(const BlobGcJobStats& stats) {
+  micros += stats.micros;
+
   num_input_records += stats.num_input_records;
   num_input_files += stats.num_input_files;
 
@@ -46,6 +48,7 @@ void BlobGcJobStats::Add(const BlobGcJobStats& stats) {
 
   total_input_raw_key_bytes += stats.total_input_raw_key_bytes;
   total_input_raw_value_bytes += stats.total_input_raw_value_bytes;
+  estimated_total_output_bytes += stats.estimated_total_output_bytes;
 
   num_input_deletion_records += stats.num_input_deletion_records;
   num_expired_deletion_records += stats.num_expired_deletion_records;

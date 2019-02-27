@@ -7,10 +7,10 @@
 namespace rocksdb {
 namespace titandb {
 
-Status NewBlobFileReader(uint64_t file_number, uint64_t readahead_size,
-                         const TitanDBOptions& db_options,
-                         const EnvOptions& env_options, Env* env,
-                         std::unique_ptr<RandomAccessFileReader>* result);
+Status NewFileReader(uint64_t file_number, uint64_t readahead_size,
+                     const TitanDBOptions& db_options,
+                     const EnvOptions& env_options, Env* env,
+                     std::unique_ptr<RandomAccessFileReader>* result);
 
 class BlobFileReader {
  public:

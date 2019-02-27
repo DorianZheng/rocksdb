@@ -21,6 +21,11 @@ class BlobFileHandle {
 // Manages the process of blob files creation.
 class BlobFileManager {
  public:
+  struct BlobFilePair {
+    std::shared_ptr<BlobFileMeta> meta;
+    std::unique_ptr<BlobFileHandle> handle;
+  };
+
   virtual ~BlobFileManager() {}
 
   // Creates a new file. The new file should not be accessed until
@@ -28,23 +33,19 @@ class BlobFileManager {
   // If successful, sets "*handle* to the new file handle.
   virtual Status NewFile(std::unique_ptr<BlobFileHandle>* handle) = 0;
 
-  // Finishes the file with the provided metadata. Stops writting to
+  // Finishes the file with the provided metadata. Stops writing to
   // the file anymore.
   // REQUIRES: FinishFile(), DeleteFile() have not been called.
   virtual Status FinishFile(uint32_t cf_id, std::shared_ptr<BlobFileMeta> file,
                             std::unique_ptr<BlobFileHandle>&& handle) {
-    std::vector<std::pair<std::shared_ptr<BlobFileMeta>,
-                          std::unique_ptr<BlobFileHandle>>>
-        tmp;
-    tmp.emplace_back(std::make_pair(file, std::move(handle)));
+    std::vector<BlobFilePair> tmp;
+    tmp.emplace_back(BlobFilePair{file, std::move(handle)});
     return BatchFinishFiles(cf_id, tmp);
   }
 
   // Batch version of FinishFile
-  virtual Status BatchFinishFiles(
-      uint32_t cf_id,
-      const std::vector<std::pair<std::shared_ptr<BlobFileMeta>,
-                                  std::unique_ptr<BlobFileHandle>>>& files) {
+  virtual Status BatchFinishFiles(uint32_t cf_id,
+                                  const std::vector<BlobFilePair>& files) {
     (void)cf_id;
     (void)files;
     return Status::OK();

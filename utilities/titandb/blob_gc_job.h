@@ -15,23 +15,17 @@ namespace titandb {
 
 class BlobGcJob {
  public:
-  BlobGcJob(uint64_t job_id,
-              BlobGc* blob_gc,
-              DB* db,
-              port::Mutex* mutex,
-              const TitanDBOptions& titan_db_options,
-              Env* env,
-              const EnvOptions& env_options,
-              BlobFileManager* blob_file_manager,
-              VersionSet* version_set,
-              LogBuffer* log_buffer,
-              std::atomic_bool* shutting_down);
+  BlobGcJob(uint64_t job_id, BlobGc* blob_gc, DB* db, port::Mutex* mutex,
+            const TitanDBOptions& titan_db_options, Env* env,
+            const EnvOptions& env_options, BlobFileManager* blob_file_manager,
+            VersionSet* version_set, LogBuffer* log_buffer,
+            std::atomic_bool* shutting_down, BlobGcJobStats* gc_job_stats);
+  ~BlobGcJob();
 
   // No copying allowed
+  BlobGcJob(BlobGcJob&&) = delete;
   BlobGcJob(const BlobGcJob&) = delete;
   void operator=(const BlobGcJob&) = delete;
-
-  ~BlobGcJob();
 
   // REQUIRE: mutex held
   Status Prepare();
@@ -44,6 +38,12 @@ class BlobGcJob {
   class GcWriteCallback;
   friend class BlobGCJobTest;
 
+  struct BlobFileBuildInfo {
+    std::unique_ptr<BlobFileHandle> handle;
+    std::unique_ptr<BlobFileBuilder> builder;
+  };
+  std::vector<BlobFileBuildInfo> blob_file_build_infos_;
+
   uint64_t job_id_;
   BlobGc* blob_gc_;
   DB* base_db_;
@@ -54,33 +54,28 @@ class BlobGcJob {
   EnvOptions env_options_;
   BlobFileManager* blob_file_manager_;
   titandb::VersionSet* version_set_;
-
-  std::vector<std::pair<std::unique_ptr<BlobFileHandle>,
-                        std::unique_ptr<BlobFileBuilder>>>
-      blob_file_builders_;
   std::vector<std::pair<WriteBatch, GcWriteCallback>> rewrite_batches_;
   InternalKeyComparator* cmp_{nullptr};
 
   std::atomic_bool* shutting_down_{nullptr};
 
   LogBuffer* log_buffer_{nullptr};
-  // Unified interface for logging events
-  EventLogger* event_logger_;
 
   // stats
-  BlobGcJobStats* blob_gc_job_stats_;
+  BlobGcJobStats* gc_job_stats_{nullptr};
+  uint64_t start_micros_{0};
 
-  Status SampleCandidateFiles();
-  bool DoSample(const BlobFileMeta* file);
+  Status Sample();
   Status DoRunGC();
   Status BuildIterator(std::unique_ptr<BlobFileMergeIterator>* result);
   bool DiscardEntry(const Slice& key, const BlobIndex& blob_index);
-  Status InstallOutputBlobFiles();
-  Status RewriteValidKeyToLSM();
-  Status DeleteInputBlobFiles() const;
+  Status InstallOutputs();
+  Status RewriteToLSM();
+  Status DeleteInputs() const;
 
   bool IsShuttingDown();
 
+  // logs
   void LogGcOnStart();
   void LogGcOnFinish();
 };

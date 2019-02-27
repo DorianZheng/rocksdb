@@ -13,10 +13,11 @@ struct BlobGcJobStats {
   // Aggregate the BlogGcJobStats from another instance with this one
   void Add(const BlobGcJobStats& stats);
 
-  // the start time of this gc in microseconds.
-  uint64_t start_micros;
-  // the finish time of this gc in microseconds.
-  uint64_t finish_micors;
+  // the total elapsed time of this gc in microseconds.
+  uint64_t micros;
+
+  // the elapsed time of sampling of this gc in microseconds.
+  uint64_t sampling_micros;
 
   // the number of gc input records.
   uint64_t num_input_records;
@@ -32,6 +33,8 @@ struct BlobGcJobStats {
   uint64_t total_input_bytes;
   // the size of the gc output in bytes.
   uint64_t total_output_bytes;
+  // the estimated size of the gc output in bytes.
+  uint64_t estimated_total_output_bytes = 0;
 
   // number of records being replaced by newer record associated with same key.
   // this could be a new value or a deletion entry for that key so this field
@@ -69,13 +72,6 @@ struct BlobGcJobStats {
 
   // Time spent on preparing file write (fallocate, etc)
   uint64_t file_prepare_write_nanos;
-
-  // 0-terminated strings storing the first 8 bytes of the smallest and
-  // largest key in the output.
-  static const size_t kMaxPrefixLength = 8;
-
-  std::string smallest_output_key_prefix;
-  std::string largest_output_key_prefix;
 };
 
 }  // namespace titandb

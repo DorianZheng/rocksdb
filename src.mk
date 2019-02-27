@@ -219,10 +219,11 @@ LIB_SOURCES =                                                   \
   utilities/titandb/blob_file_iterator.cc                       \
   utilities/titandb/blob_file_reader.cc                         \
   utilities/titandb/blob_file_size_collector.cc                 \
-  utilities/titandb/base_db_listener.cc                   \
+  utilities/titandb/base_db_listener.cc                         \
   utilities/titandb/blob_format.cc                              \
   utilities/titandb/blob_gc.cc                                  \
   utilities/titandb/blob_gc_job.cc                              \
+  utilities/titandb/blob_gc_job_stats.cc                        \
   utilities/titandb/blob_gc_picker.cc                           \
   utilities/titandb/db.cc                                       \
   utilities/titandb/db_impl.cc                                  \

@@ -79,8 +79,8 @@ class BlobFileIteratorTest : public testing::Test {
   void NewBlobFileIterator() {
     uint64_t file_size = 0;
     ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
-    NewBlobFileReader(file_number_, 0, titan_options_, env_options_, env_,
-                      &readable_file_);
+    NewFileReader(file_number_, 0, titan_options_, env_options_, env_,
+                  &readable_file_);
     blob_file_iterator_.reset(new BlobFileIterator{
         std::move(readable_file_), file_number_, file_size, TitanCFOptions()});
   }
@@ -186,8 +186,8 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
       FinishBuiler();
       uint64_t file_size = 0;
       ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
-      NewBlobFileReader(file_number_, 0, titan_options_, env_options_, env_,
-                        &readable_file_);
+      NewFileReader(file_number_, 0, titan_options_, env_options_, env_,
+                    &readable_file_);
       iters.emplace_back(std::unique_ptr<BlobFileIterator>(
           new BlobFileIterator{std::move(readable_file_), file_number_,
                                file_size, TitanCFOptions()}));
@@ -200,8 +200,8 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
   FinishBuiler();
   uint64_t file_size = 0;
   ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
-  NewBlobFileReader(file_number_, 0, titan_options_, env_options_, env_,
-                    &readable_file_);
+  NewFileReader(file_number_, 0, titan_options_, env_options_, env_,
+                &readable_file_);
   iters.emplace_back(std::unique_ptr<BlobFileIterator>(new BlobFileIterator{
       std::move(readable_file_), file_number_, file_size, TitanCFOptions()}));
   BlobFileMergeIterator iter(std::move(iters));

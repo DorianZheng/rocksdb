@@ -16,12 +16,12 @@ class BlobGc {
  public:
   BlobGc(std::vector<BlobFileMeta*>&& blob_files,
          TitanCFOptions&& _titan_cf_options);
+  ~BlobGc();
 
   // No copying allowed
+  BlobGc(BlobGc&&) = delete;
   BlobGc(const BlobGc&) = delete;
   void operator=(const BlobGc&) = delete;
-
-  ~BlobGc();
 
   const std::vector<BlobFileMeta*>& inputs() { return inputs_; }
 
