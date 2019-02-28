@@ -206,7 +206,8 @@ Status BlobGcJob::DoRunGC() {
 
   const auto kTargetBlobFileSize =
       gc_job_stats_->estimated_total_output_bytes /
-      blob_gc_->titan_cf_options().blob_file_target_size;
+      (gc_job_stats_->estimated_total_output_bytes /
+       blob_gc_->titan_cf_options().blob_file_target_size);
 
   auto* cfh = blob_gc_->column_family_handle();
   uint64_t file_size = 0;
