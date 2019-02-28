@@ -65,13 +65,14 @@ class BlobGcJob {
   BlobGcJobStats* gc_job_stats_{nullptr};
   uint64_t start_micros_{0};
 
+  VersionEdit edit_;
+
   Status Sample();
   Status DoRunGC();
   Status BuildIterator(std::unique_ptr<BlobFileMergeIterator>* result);
   bool DiscardEntry(const Slice& key, const BlobIndex& blob_index);
   Status InstallOutputs();
   Status RewriteToLSM();
-  Status DeleteInputs() const;
 
   bool IsShuttingDown();
 

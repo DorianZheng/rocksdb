@@ -69,7 +69,9 @@ BlobGcJob::BlobGcJob(uint64_t job_id, BlobGc* blob_gc, DB* db,
       version_set_(version_set),
       shutting_down_(shutting_down),
       log_buffer_(log_buffer),
-      gc_job_stats_(gc_job_stats) {}
+      gc_job_stats_(gc_job_stats) {
+  edit_.SetColumnFamilyID(blob_gc_->column_family_handle()->GetID());
+}
 
 BlobGcJob::~BlobGcJob() {
   if (cmp_) delete cmp_;
@@ -93,6 +95,11 @@ Status BlobGcJob::Run() {
   // added to db before we rewrite any key to LSM
   if (s.ok()) s = InstallOutputs();
   if (s.ok()) s = RewriteToLSM();
+  if (s.ok()) {
+    for (const auto& file : blob_gc_->sampled_inputs()) {
+      edit_.DeleteBlobFile(file->file_number());
+    }
+  }
 
   LogGcOnFinish();
   LogFlush(db_options_.info_log.get());
@@ -101,8 +108,8 @@ Status BlobGcJob::Run() {
 }
 
 Status BlobGcJob::Finish() {
-  // TODO(@DorianZheng) cal discardable size for new blob file
-  auto s = DeleteInputs();
+  auto s = version_set_->LogAndApply(&edit_, this->mutex_);
+
   gc_job_stats_->micros = env_->NowMicros() - start_micros_;
   return s;
 }
@@ -383,6 +390,7 @@ Status BlobGcJob::RewriteToLSM() {
       break;
     }
     s = db_impl->WriteWithCallback(wo, &write_batch.first, &write_batch.second);
+    // TODO(@DorianZheng) cal discardable size for new blob file
     if (s.ok()) {
       // Key is successfully written to LSM
     } else if (s.IsBusy()) {
@@ -400,18 +408,6 @@ Status BlobGcJob::RewriteToLSM() {
     db_impl->FlushWAL(true);
   }
 
-  return s;
-}
-
-Status BlobGcJob::DeleteInputs() const {
-  VersionEdit edit;
-  edit.SetColumnFamilyID(blob_gc_->column_family_handle()->GetID());
-  for (const auto& file : blob_gc_->sampled_inputs()) {
-    ROCKS_LOG_BUFFER(log_buffer_, "Titan add obsolete file [%llu]",
-                     file->file_number());
-    edit.DeleteBlobFile(file->file_number());
-  }
-  auto s = version_set_->LogAndApply(&edit, this->mutex_);
   return s;
 }
 
