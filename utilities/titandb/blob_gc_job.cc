@@ -79,6 +79,7 @@ BlobGcJob::~BlobGcJob() {
 
 Status BlobGcJob::Prepare() {
   start_micros_ = env_->NowMicros();
+
   return Status::OK();
 }
 
@@ -111,6 +112,7 @@ Status BlobGcJob::Finish() {
   auto s = version_set_->LogAndApply(&edit_, this->mutex_);
 
   gc_job_stats_->micros = env_->NowMicros() - start_micros_;
+
   return s;
 }
 
