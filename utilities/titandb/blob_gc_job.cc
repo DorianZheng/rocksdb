@@ -204,10 +204,13 @@ Status BlobGcJob::DoRunGC() {
   std::unique_ptr<BlobFileHandle> blob_file_handle;
   std::unique_ptr<BlobFileBuilder> blob_file_builder;
 
-  const uint64_t kTargetBlobFileSize =
+  uint64_t estimate_file_num =
       gc_job_stats_->estimated_total_output_bytes /
-      (gc_job_stats_->estimated_total_output_bytes /
-       blob_gc_->titan_cf_options().blob_file_target_size);
+      blob_gc_->titan_cf_options().blob_file_target_size;
+  const uint64_t kTargetBlobFileSize =
+      estimate_file_num > 0
+          ? gc_job_stats_->estimated_total_output_bytes / estimate_file_num
+          : blob_gc_->titan_cf_options().blob_file_target_size;
 
   auto* cfh = blob_gc_->column_family_handle();
   uint64_t file_size = 0;
