@@ -67,7 +67,7 @@ class BlobGcJob {
 
   VersionEdit edit_;
 
-  Status Sample();
+  Status SampleInputs();
   Status DoRunGC();
   Status BuildIterator(std::unique_ptr<BlobFileMergeIterator>* result);
   bool DiscardEntry(const Slice& key, const BlobIndex& blob_index);

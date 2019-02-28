@@ -87,7 +87,7 @@ Status BlobGcJob::Run() {
   log_buffer_->FlushBufferToLog();
   LogGcOnStart();
 
-  auto s = Sample();
+  auto s = SampleInputs();
 
   if (s.ok()) s = DoRunGC();
 
@@ -116,7 +116,7 @@ Status BlobGcJob::Finish() {
   return s;
 }
 
-Status BlobGcJob::Sample() {
+Status BlobGcJob::SampleInputs() {
   StopWatch sw(env_, nullptr, 0, &gc_job_stats_->sampling_micros);
 
   auto gc_threshold = blob_gc_->titan_cf_options().blob_file_discardable_ratio;
@@ -176,6 +176,11 @@ Status BlobGcJob::Sample() {
     assert(iter.status().ok());
 
     if (discardable_size >= sample_size_window * gc_threshold) {
+      gc_job_stats_->total_input_bytes += file->file_size();
+      // We assume the size of blob file besides key-value pairs size is rather
+      // small
+      gc_job_stats_->estimated_total_output_bytes +=
+          discardable_size / sample_size_window * file->file_size();
       sampled_inputs.emplace_back(file);
     }
   }
@@ -199,13 +204,11 @@ Status BlobGcJob::DoRunGC() {
   std::unique_ptr<BlobFileHandle> blob_file_handle;
   std::unique_ptr<BlobFileBuilder> blob_file_builder;
 
+  const auto kTargetBlobFileSize =
+      gc_job_stats_->estimated_total_output_bytes /
+      blob_gc_->titan_cf_options().blob_file_target_size;
+
   auto* cfh = blob_gc_->column_family_handle();
-
-  //  uint64_t drop_entry_num = 0;
-  //  uint64_t drop_entry_size = 0;
-  //  uint64_t total_entry_num = 0;
-  //  uint64_t total_entry_size = 0;
-
   uint64_t file_size = 0;
 
   std::string last_key;
@@ -228,6 +231,7 @@ Status BlobGcJob::DoRunGC() {
     }
 
     if (DiscardEntry(gc_iter->key(), blob_index)) {
+      gc_job_stats_->num_input_deletion_records++;
       continue;
     }
 
@@ -235,8 +239,8 @@ Status BlobGcJob::DoRunGC() {
 
     // Rewrite entry to new blob file
     if ((!blob_file_handle && !blob_file_builder) ||
-        file_size >= blob_gc_->titan_cf_options().blob_file_target_size) {
-      if (file_size >= blob_gc_->titan_cf_options().blob_file_target_size) {
+        file_size >= kTargetBlobFileSize) {
+      if (file_size >= kTargetBlobFileSize) {
         assert(blob_file_builder);
         assert(blob_file_handle);
         assert(blob_file_builder->status().ok());
@@ -258,7 +262,7 @@ Status BlobGcJob::DoRunGC() {
     blob_record.key = gc_iter->key();
     blob_record.value = gc_iter->value();
 
-    //    file_size_ += blob_record.key.size() + blob_record.value.size();
+    file_size += blob_record.key.size() + blob_record.value.size();
 
     BlobIndex new_blob_index;
     new_blob_index.file_number = blob_file_handle->GetNumber();
