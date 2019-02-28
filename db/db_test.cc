@@ -5266,11 +5266,12 @@ TEST_F(DBTest, CompactFilesShouldTriggerAutoCompaction) {
   SyncPoint::GetInstance()->EnableProcessing();
 
   port::Thread manual_compaction_thread([&]() {
-    auto s = db_->CompactFiles(CompactionOptions(), db_->DefaultColumnFamily(),
-                               input_files, 0);
+      auto s = db_->CompactFiles(CompactionOptions(),
+          db_->DefaultColumnFamily(), input_files, 0);
   });
 
-  TEST_SYNC_POINT("DBTest::CompactFilesShouldTriggerAutoCompaction:Begin");
+  TEST_SYNC_POINT(
+          "DBTest::CompactFilesShouldTriggerAutoCompaction:Begin");
   // generate enough files to trigger compaction
   for (int i = 0; i < 20; ++i) {
     for (int j = 0; j < 2; ++j) {
@@ -5280,15 +5281,16 @@ TEST_F(DBTest, CompactFilesShouldTriggerAutoCompaction) {
   }
   db_->GetColumnFamilyMetaData(db_->DefaultColumnFamily(), &cf_meta_data);
   ASSERT_GT(cf_meta_data.levels[0].files.size(),
-            options.level0_file_num_compaction_trigger);
-  TEST_SYNC_POINT("DBTest::CompactFilesShouldTriggerAutoCompaction:End");
+      options.level0_file_num_compaction_trigger);
+  TEST_SYNC_POINT(
+          "DBTest::CompactFilesShouldTriggerAutoCompaction:End");
 
   manual_compaction_thread.join();
   dbfull()->TEST_WaitForCompact();
 
   db_->GetColumnFamilyMetaData(db_->DefaultColumnFamily(), &cf_meta_data);
   ASSERT_LE(cf_meta_data.levels[0].files.size(),
-            options.level0_file_num_compaction_trigger);
+      options.level0_file_num_compaction_trigger);
 }
 
 // Github issue #595
